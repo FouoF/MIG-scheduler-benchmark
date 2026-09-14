@@ -68,7 +68,7 @@ func (b *builtin) Objects(j model.Job) ([]byte, error) {
 	case "nvidia-dra":
 		expr := fmt.Sprintf("device.attributes['gpu.nvidia.com'].profile == %q", j.Profile)
 		if j.MemoryMB > 0 {
-			expr = fmt.Sprintf("device.attributes['gpu.nvidia.com'].type == 'mig' && device.capacity['gpu.nvidia.com'].memory >= quantity('%dMi') && device.capacity['gpu.nvidia.com'].multiprocessors >= quantity('%d')", j.MemoryMB, j.MinComputePercent)
+			expr = fmt.Sprintf("device.attributes['gpu.nvidia.com'].type == 'mig' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('%dMi')) >= 0 && device.capacity['gpu.nvidia.com'].multiprocessors.compareTo(quantity('%d')) >= 0", j.MemoryMB, j.MinComputePercent)
 		}
 		obj = []any{
 			map[string]any{"apiVersion": "resource.k8s.io/v1", "kind": "ResourceClaim", "metadata": map[string]any{"name": j.ID, "annotations": map[string]string{"migbench.io/compute-core-ms": fmt.Sprint(j.ComputeCoreMS)}}, "spec": map[string]any{"devices": map[string]any{"requests": []any{map[string]any{"name": "gpu", "exactly": map[string]any{"deviceClassName": "mig.nvidia.com", "selectors": []any{map[string]any{"cel": map[string]string{"expression": expr}}}}}}}}},

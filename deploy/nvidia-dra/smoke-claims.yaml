@@ -12,7 +12,7 @@ spec:
       exactly:
         deviceClassName: mig.nvidia.com
         selectors:
-        - cel: {expression: "device.capacity['gpu.nvidia.com'].memory >= quantity('18432Mi') && device.capacity['gpu.nvidia.com'].multiprocessors >= quantity('20')"}
+        - cel: {expression: "device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('18432Mi')) >= 0 && device.capacity['gpu.nvidia.com'].multiprocessors.compareTo(quantity('20')) >= 0"}
 ---
 apiVersion: v1
 kind: Pod

@@ -22,6 +22,17 @@ func TestNativeObjects(t *testing.T) {
 	}
 }
 
+func TestDRAResourceBoundUsesQuantityComparison(t *testing.T) {
+	j := model.Job{ID: "job-2", ComputeCoreMS: 1000, MemoryMB: 18432, MinComputePercent: 20}
+	b, err := New(config.Backend{Name: "dra", Kind: "nvidia-dra"}).Objects(j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), ".compareTo(quantity(") {
+		t.Fatalf("resource selector does not use Kubernetes Quantity comparison: %s", b)
+	}
+}
+
 func TestPolicies(t *testing.T) {
 	cs := []Candidate{{Node: "a", FreeGPC: 6}, {Node: "b", FreeGPC: 2}}
 	j := model.Job{}
