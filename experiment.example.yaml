@@ -32,6 +32,7 @@ backends:
     mode: simulated
     policy: first-fit
 workload:
+  format: resource-bound-v2
   seed: 20260914
   jobs: 250
   model: poisson

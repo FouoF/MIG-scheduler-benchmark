@@ -40,6 +40,7 @@ spec:
   - &mig1g0
     name: mig-1g10gb-0
     attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 1g.10gb}}
+    capacity: {gpu.nvidia.com/memory: {value: 10Gi}, gpu.nvidia.com/multiprocessors: {value: "14"}}
     consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}}}]
   - <<: *mig1g0
     name: mig-1g10gb-1
@@ -62,6 +63,7 @@ spec:
   - &mig2g
     name: mig-2g20gb-0
     attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 2g.20gb}}
+    capacity: {gpu.nvidia.com/memory: {value: 20Gi}, gpu.nvidia.com/multiprocessors: {value: "28"}}
     consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}, memory-slice-1: {value: "1"}}}]
   - <<: *mig2g
     name: mig-2g20gb-2
@@ -72,10 +74,12 @@ spec:
   - &mig3g
     name: mig-3g40gb-0
     attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 3g.40gb}}
+    capacity: {gpu.nvidia.com/memory: {value: 40Gi}, gpu.nvidia.com/multiprocessors: {value: "42"}}
     consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}, memory-slice-1: {value: "1"}, memory-slice-2: {value: "1"}}}]
   - <<: *mig3g
     name: mig-3g40gb-4
     consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-4: {value: "1"}, memory-slice-5: {value: "1"}, memory-slice-6: {value: "1"}}}]
   - name: mig-7g80gb-0
     attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 7g.80gb}}
+    capacity: {gpu.nvidia.com/memory: {value: 80Gi}, gpu.nvidia.com/multiprocessors: {value: "100"}}
     consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}, memory-slice-1: {value: "1"}, memory-slice-2: {value: "1"}, memory-slice-3: {value: "1"}, memory-slice-4: {value: "1"}, memory-slice-5: {value: "1"}, memory-slice-6: {value: "1"}}}]

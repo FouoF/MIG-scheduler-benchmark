@@ -28,7 +28,7 @@ func TestAdversarialOrdersSmallThenLarge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j[0].Profile != "1g.10gb" || j[3].Profile != "7g.80gb" {
+	if j[0].MemoryMB != 10240 || j[3].MemoryMB != 81920 || j[0].Profile != "" || j[3].Profile != "" {
 		t.Fatalf("unexpected profiles: %#v", j)
 	}
 }

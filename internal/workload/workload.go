@@ -14,6 +14,10 @@ import (
 )
 
 func Generate(c config.Config) ([]model.Job, error) {
+	format := c.Workload.Format
+	if format == "" {
+		format = "resource-bound-v2"
+	}
 	r := rand.New(rand.NewPCG(uint64(c.Workload.Seed), uint64(c.Workload.Seed)^0x9e3779b97f4a7c15))
 	profiles, weights, err := weightedProfiles(c)
 	if err != nil {
@@ -50,9 +54,27 @@ func Generate(c config.Config) ([]model.Job, error) {
 		if d < 1 {
 			d = 1
 		}
-		jobs = append(jobs, model.Job{ID: fmt.Sprintf("job-%06d", i+1), ArrivalMS: arrival, DurationMS: d, Profile: p})
+		job := model.Job{ID: fmt.Sprintf("job-%06d", i+1), Format: format, ArrivalMS: arrival}
+		if format == "profile-bound-v1" {
+			job.DurationMS, job.Profile = d, p
+		} else {
+			profile := profileByName(c.Cluster.Profiles, p)
+			job.MemoryMB = profile.MemoryGB * 1024
+			job.MinComputePercent = profile.ComputePercent
+			job.ComputeCoreMS = d * int64(profile.ComputePercent)
+		}
+		jobs = append(jobs, job)
 	}
 	return jobs, nil
+}
+
+func profileByName(profiles []model.Profile, name string) model.Profile {
+	for _, p := range profiles {
+		if p.Name == name {
+			return p
+		}
+	}
+	panic("validated profile missing")
 }
 
 func weightedProfiles(c config.Config) ([]string, []float64, error) {

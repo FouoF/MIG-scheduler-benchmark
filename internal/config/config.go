@@ -38,6 +38,7 @@ type Backend struct {
 }
 
 type Workload struct {
+	Format           string             `yaml:"format" json:"format"`
 	Seed             int64              `yaml:"seed" json:"seed"`
 	Jobs             int                `yaml:"jobs" json:"jobs"`
 	Model            string             `yaml:"model" json:"model"`
@@ -110,6 +111,9 @@ func (c *Config) defaults() {
 	if c.Workload.Model == "" {
 		c.Workload.Model = "poisson"
 	}
+	if c.Workload.Format == "" {
+		c.Workload.Format = "resource-bound-v2"
+	}
 	if c.Costs.CreateMS == 0 {
 		c.Costs.CreateMS = 250
 	}
@@ -151,6 +155,9 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid profile %+v", p)
 		}
 		seen[p.Name] = true
+		if p.ComputePercent < 1 || p.ComputePercent > 100 {
+			return fmt.Errorf("profile %s has invalid computePercent %d", p.Name, p.ComputePercent)
+		}
 	}
 	for _, b := range c.Backends {
 		if b.Name == "" || (b.Kind != "hami" && b.Kind != "nvidia-dra" && b.Kind != "baseline") {
@@ -176,11 +183,11 @@ func (c Config) Validate() error {
 
 func H100Profiles() []model.Profile {
 	return []model.Profile{
-		{Name: "1g.10gb", GPC: 1, MemoryGB: 10, Placements: []int{0, 1, 2, 3, 4, 5, 6}},
-		{Name: "1g.20gb", GPC: 1, MemoryGB: 20, Placements: []int{0, 1, 2, 3, 4, 5, 6}},
-		{Name: "2g.20gb", GPC: 2, MemoryGB: 20, Placements: []int{0, 2, 4}},
-		{Name: "3g.40gb", GPC: 3, MemoryGB: 40, Placements: []int{0, 4}},
-		{Name: "4g.40gb", GPC: 4, MemoryGB: 40, Placements: []int{0}},
-		{Name: "7g.80gb", GPC: 7, MemoryGB: 80, Placements: []int{0}},
+		{Name: "1g.10gb", GPC: 1, MemoryGB: 10, ComputePercent: 14, Placements: []int{0, 1, 2, 3, 4, 5, 6}},
+		{Name: "1g.20gb", GPC: 1, MemoryGB: 20, ComputePercent: 14, Placements: []int{0, 1, 2, 3, 4, 5, 6}},
+		{Name: "2g.20gb", GPC: 2, MemoryGB: 20, ComputePercent: 28, Placements: []int{0, 2, 4}},
+		{Name: "3g.40gb", GPC: 3, MemoryGB: 40, ComputePercent: 42, Placements: []int{0, 4}},
+		{Name: "4g.40gb", GPC: 4, MemoryGB: 40, ComputePercent: 57, Placements: []int{0}},
+		{Name: "7g.80gb", GPC: 7, MemoryGB: 80, ComputePercent: 100, Placements: []int{0}},
 	}
 }

@@ -58,7 +58,7 @@ func Run(c config.Config, b config.Backend, jobs []model.Job) (Result, error) {
 			return Result{}, fmt.Errorf("job IDs must be non-empty and unique: %q", j.ID)
 		}
 		seenJobs[j.ID] = true
-		if j.ArrivalMS < 0 || j.DurationMS < 1 {
+		if j.ArrivalMS < 0 || (j.Profile == "" && (j.ComputeCoreMS < 1 || j.MemoryMB < 1)) || (j.Profile != "" && j.DurationMS < 1) {
 			return Result{}, fmt.Errorf("job %s has invalid timing", j.ID)
 		}
 	}
@@ -116,7 +116,7 @@ func (e *engine) schedule() {
 		progress := false
 		for i := 0; i < len(e.pending); {
 			j := e.pending[i]
-			p, ok := e.profiles[j.Profile]
+			p, ok := e.resolveProfile(j)
 			if !ok {
 				i++
 				continue
@@ -134,16 +134,21 @@ func (e *engine) schedule() {
 				continue
 			}
 			start := e.now + e.c.Costs.CreateMS
-			finish := start + j.DurationMS + e.c.Costs.DeleteMS
+			runtime := j.DurationMS
+			if j.ComputeCoreMS > 0 {
+				runtime = (j.ComputeCoreMS + int64(p.ComputePercent) - 1) / int64(p.ComputePercent)
+			}
+			finish := start + runtime + e.c.Costs.DeleteMS
 			g := &e.nodesByName(choice.Node).gpus[choice.GPU]
 			for s := choice.Start; s < choice.Start+p.GPC; s++ {
 				g.slots[s] = j.ID
 			}
 			g.memoryUsed += p.MemoryGB
+			j.Profile = p.Name
 			a := allocation{job: j, profile: p, start: start, finish: finish, node: choice.Node, gpu: choice.GPU, slot: choice.Start}
 			e.running[j.ID] = a
 			e.creates++
-			e.results = append(e.results, model.JobResult{JobID: j.ID, Profile: j.Profile, ArrivalMS: j.ArrivalMS, StartMS: start, FinishMS: finish, WaitMS: start - j.ArrivalMS, SchedulingUS: lat, Node: choice.Node, GPU: choice.GPU, RequestFragmented: e.fragmentedJobs[j.ID]})
+			e.results = append(e.results, model.JobResult{JobID: j.ID, Profile: p.Name, ArrivalMS: j.ArrivalMS, StartMS: start, FinishMS: finish, WaitMS: start - j.ArrivalMS, SchedulingUS: lat, Node: choice.Node, GPU: choice.GPU, RequestFragmented: e.fragmentedJobs[j.ID], ComputeCoreMS: j.ComputeCoreMS, RequestedMemoryMB: j.MemoryMB, AllocatedMemoryMB: p.MemoryGB * 1024, AllocatedCompute: p.ComputePercent, RuntimeMS: runtime})
 			if raw, err := e.adapter.Objects(j); err == nil {
 				e.objects[j.ID] = string(raw)
 			}
@@ -155,6 +160,32 @@ func (e *engine) schedule() {
 			return
 		}
 	}
+}
+
+func (e *engine) resolveProfile(j model.Job) (model.Profile, bool) {
+	if j.Profile != "" {
+		p, ok := e.profiles[j.Profile]
+		return p, ok
+	}
+	var feasible []model.Profile
+	for _, p := range e.c.Cluster.Profiles {
+		if p.MemoryGB*1024 >= j.MemoryMB && p.ComputePercent >= j.MinComputePercent {
+			feasible = append(feasible, p)
+		}
+	}
+	if len(feasible) == 0 {
+		return model.Profile{}, false
+	}
+	sort.Slice(feasible, func(i, k int) bool {
+		if feasible[i].GPC != feasible[k].GPC {
+			return feasible[i].GPC < feasible[k].GPC
+		}
+		if feasible[i].MemoryGB != feasible[k].MemoryGB {
+			return feasible[i].MemoryGB < feasible[k].MemoryGB
+		}
+		return feasible[i].Name < feasible[k].Name
+	})
+	return feasible[0], true
 }
 
 func (e *engine) candidates(j model.Job, p model.Profile) ([]adapter.Candidate, bool) {

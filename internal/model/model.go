@@ -3,18 +3,24 @@ package model
 import "time"
 
 type Profile struct {
-	Name       string `json:"name" yaml:"name"`
-	GPC        int    `json:"gpc" yaml:"gpc"`
-	MemoryGB   int    `json:"memoryGB" yaml:"memoryGB"`
-	Placements []int  `json:"placements,omitempty" yaml:"placements,omitempty"`
+	Name           string `json:"name" yaml:"name"`
+	GPC            int    `json:"gpc" yaml:"gpc"`
+	MemoryGB       int    `json:"memoryGB" yaml:"memoryGB"`
+	ComputePercent int    `json:"computePercent" yaml:"computePercent"`
+	Placements     []int  `json:"placements,omitempty" yaml:"placements,omitempty"`
 }
 
 type Job struct {
-	ID           string            `json:"jobID" yaml:"jobID"`
-	ArrivalMS    int64             `json:"arrivalMS" yaml:"arrivalMS"`
-	DurationMS   int64             `json:"durationMS" yaml:"durationMS"`
-	Profile      string            `json:"profile" yaml:"profile"`
-	NodeSelector map[string]string `json:"nodeSelector,omitempty" yaml:"nodeSelector,omitempty"`
+	ID                string            `json:"jobID" yaml:"jobID"`
+	Format            string            `json:"format,omitempty" yaml:"format,omitempty"`
+	ArrivalMS         int64             `json:"arrivalMS" yaml:"arrivalMS"`
+	ComputeCoreMS     int64             `json:"computeCoreMS,omitempty" yaml:"computeCoreMS,omitempty"`
+	MemoryMB          int               `json:"memoryMB,omitempty" yaml:"memoryMB,omitempty"`
+	MinComputePercent int               `json:"minComputePercent,omitempty" yaml:"minComputePercent,omitempty"`
+	DeadlineMS        int64             `json:"deadlineMS,omitempty" yaml:"deadlineMS,omitempty"`
+	DurationMS        int64             `json:"durationMS,omitempty" yaml:"durationMS,omitempty"`
+	Profile           string            `json:"profile,omitempty" yaml:"profile,omitempty"`
+	NodeSelector      map[string]string `json:"nodeSelector,omitempty" yaml:"nodeSelector,omitempty"`
 }
 
 type PlacementDecision struct {
@@ -54,6 +60,11 @@ type JobResult struct {
 	Node              string `json:"node"`
 	GPU               int    `json:"gpu"`
 	RequestFragmented bool   `json:"requestFragmented"`
+	ComputeCoreMS     int64  `json:"computeCoreMS,omitempty"`
+	RequestedMemoryMB int    `json:"requestedMemoryMB,omitempty"`
+	AllocatedMemoryMB int    `json:"allocatedMemoryMB,omitempty"`
+	AllocatedCompute  int    `json:"allocatedComputePercent,omitempty"`
+	RuntimeMS         int64  `json:"runtimeMS"`
 }
 
 type Summary struct {
