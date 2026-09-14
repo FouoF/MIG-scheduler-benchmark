@@ -1,0 +1,34 @@
+package workload
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/dynamia-ai/migbench/internal/config"
+)
+
+func TestGenerateDeterministic(t *testing.T) {
+	c := config.Config{Cluster: config.Cluster{Nodes: 1, GPUsPerNode: 1, Model: "H100-80GB", GPCPerGPU: 7, MemoryGB: 80, Profiles: config.H100Profiles()}, Backends: []config.Backend{{Name: "x", Kind: "baseline", Mode: "simulated"}}, Workload: config.Workload{Seed: 42, Jobs: 20, Model: "poisson", ArrivalMeanMS: 10, DurationMedianMS: 100, DurationSigma: .5}}
+	a, err := Generate(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Generate(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(a, b) {
+		t.Fatal("same seed generated different traces")
+	}
+}
+
+func TestAdversarialOrdersSmallThenLarge(t *testing.T) {
+	c := config.Config{Cluster: config.Cluster{Profiles: config.H100Profiles()}, Workload: config.Workload{Seed: 1, Jobs: 4, Model: "adversarial", ArrivalMeanMS: 1, DurationMedianMS: 1, DurationSigma: .1}}
+	j, err := Generate(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j[0].Profile != "1g.10gb" || j[3].Profile != "7g.80gb" {
+		t.Fatalf("unexpected profiles: %#v", j)
+	}
+}

@@ -1,0 +1,55 @@
+name: h100-dynamic-mig-comparison
+cluster:
+  nodes: 2
+  gpusPerNode: 4
+  model: H100-80GB
+  gpcPerGPU: 7
+  memoryGB: 80
+backends:
+  - name: hami-release-v2.10.0
+    kind: hami
+    mode: simulated
+    policy: binpack
+    gitRef: v2.10.0
+    image: projecthami/hami@sha256:8c45cd84d8df3e6a8fe8c95e0141684973b5015692a0ef87588da05284f34447
+    manifestChecksum: 261bdc230884b84b62b6169f19bf91e8d5c515f412b4a197400ad08d2cb5ca1f
+  - name: hami-master-88b118e
+    kind: hami
+    mode: simulated
+    policy: binpack
+    gitRef: 88b118e565a9effaa27f81669da291c5508fc5e4
+    image: local-build@sha256:08b88af4a397b21ab18ddc5adee17b8cda4da2702c9204ffa4515ae7643a9327
+    manifestChecksum: 4a7623662b3f476d8b3497e173b56e075ac869b3d61373bf8e7a472eed6108e6
+  - name: nvidia-dra-v0.5.0
+    kind: nvidia-dra
+    mode: simulated
+    policy: spread
+    gitRef: v0.5.0
+    image: registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu@sha256:e1f104e64383ee693e982a5e6b7cf0b750023aaa5cc9b7dcc37c8e0549232933
+    manifestChecksum: 23b9e008c5cd68e184ac758b4feb292b03a1aa5527d4162e88100d02b9f5c60a
+  - name: first-fit
+    kind: baseline
+    mode: simulated
+    policy: first-fit
+workload:
+  seed: 20260914
+  jobs: 250
+  model: poisson
+  arrivalMeanMS: 3000
+  durationMedianMS: 60000
+  durationSigma: 0.8
+  repetitions: 1
+  profileWeights:
+    1g.10gb: 35
+    1g.20gb: 10
+    2g.20gb: 25
+    3g.40gb: 15
+    4g.40gb: 10
+    7g.80gb: 5
+costs:
+  createMS: 250
+  deleteMS: 100
+  reconfigureMS: 1500
+limits:
+  schedulingTimeoutMS: 30000
+  sampleEveryMS: 1000

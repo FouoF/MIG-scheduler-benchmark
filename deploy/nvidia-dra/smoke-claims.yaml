@@ -1,0 +1,23 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaim
+metadata: {name: mig-1g-a}
+spec:
+  devices:
+    requests:
+    - name: gpu
+      exactly:
+        deviceClassName: mig.nvidia.com
+        selectors:
+        - cel: {expression: "device.attributes['gpu.nvidia.com'].profile == '1g.10gb'"}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: mig-1g-a}
+spec:
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10.1
+    resources: {claims: [{name: gpu}]}
+  resourceClaims:
+  - name: gpu
+    resourceClaimName: mig-1g-a

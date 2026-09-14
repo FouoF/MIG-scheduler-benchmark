@@ -1,0 +1,81 @@
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: mig.nvidia.com
+spec:
+  selectors:
+  - cel:
+      expression: "device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].type == 'mig'"
+---
+# This fixture intentionally models only the H100 placement geometry needed by
+# the scheduler.  It is not a kubelet plugin and never prepares a device.
+apiVersion: resource.k8s.io/v1
+kind: ResourceSlice
+metadata:
+  name: fake-h100-worker-counters
+spec:
+  driver: gpu.nvidia.com
+  nodeName: nvidia-dra-worker
+  pool: {name: nvidia-dra-worker, generation: 1, resourceSliceCount: 2}
+  sharedCounters:
+  - name: gpu-0-counter-set
+    counters: &h100Counters
+      memory-slice-0: {value: "1"}
+      memory-slice-1: {value: "1"}
+      memory-slice-2: {value: "1"}
+      memory-slice-3: {value: "1"}
+      memory-slice-4: {value: "1"}
+      memory-slice-5: {value: "1"}
+      memory-slice-6: {value: "1"}
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceSlice
+metadata:
+  name: fake-h100-worker-devices
+spec:
+  driver: gpu.nvidia.com
+  nodeName: nvidia-dra-worker
+  pool: {name: nvidia-dra-worker, generation: 1, resourceSliceCount: 2}
+  devices: &h100Devices
+  - &mig1g0
+    name: mig-1g10gb-0
+    attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 1g.10gb}}
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}}}]
+  - <<: *mig1g0
+    name: mig-1g10gb-1
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-1: {value: "1"}}}]
+  - <<: *mig1g0
+    name: mig-1g10gb-2
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-2: {value: "1"}}}]
+  - <<: *mig1g0
+    name: mig-1g10gb-3
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-3: {value: "1"}}}]
+  - <<: *mig1g0
+    name: mig-1g10gb-4
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-4: {value: "1"}}}]
+  - <<: *mig1g0
+    name: mig-1g10gb-5
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-5: {value: "1"}}}]
+  - <<: *mig1g0
+    name: mig-1g10gb-6
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-6: {value: "1"}}}]
+  - &mig2g
+    name: mig-2g20gb-0
+    attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 2g.20gb}}
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}, memory-slice-1: {value: "1"}}}]
+  - <<: *mig2g
+    name: mig-2g20gb-2
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-2: {value: "1"}, memory-slice-3: {value: "1"}}}]
+  - <<: *mig2g
+    name: mig-2g20gb-4
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-4: {value: "1"}, memory-slice-5: {value: "1"}}}]
+  - &mig3g
+    name: mig-3g40gb-0
+    attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 3g.40gb}}
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}, memory-slice-1: {value: "1"}, memory-slice-2: {value: "1"}}}]
+  - <<: *mig3g
+    name: mig-3g40gb-4
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-4: {value: "1"}, memory-slice-5: {value: "1"}, memory-slice-6: {value: "1"}}}]
+  - name: mig-7g80gb-0
+    attributes: {gpu.nvidia.com/type: {string: mig}, gpu.nvidia.com/profile: {string: 7g.80gb}}
+    consumesCounters: [{counterSet: gpu-0-counter-set, counters: {memory-slice-0: {value: "1"}, memory-slice-1: {value: "1"}, memory-slice-2: {value: "1"}, memory-slice-3: {value: "1"}, memory-slice-4: {value: "1"}, memory-slice-5: {value: "1"}, memory-slice-6: {value: "1"}}}]
