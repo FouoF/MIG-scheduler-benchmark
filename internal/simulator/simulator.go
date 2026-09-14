@@ -49,6 +49,8 @@ type engine struct {
 	now, last                                int64
 	gpcArea, memArea, fragArea, strandedArea float64
 	creates, deletes, reconfigs, reqFrag     int
+	lastArrival, measurementMS, backlogMS    int64
+	peakGPCUtilization                       float64
 }
 
 func Run(c config.Config, b config.Backend, jobs []model.Job) (Result, error) {
@@ -75,6 +77,9 @@ func Run(c config.Config, b config.Backend, jobs []model.Job) (Result, error) {
 	}
 	jobs = append([]model.Job(nil), jobs...)
 	sort.SliceStable(jobs, func(i, j int) bool { return jobs[i].ArrivalMS < jobs[j].ArrivalMS })
+	if len(jobs) > 0 {
+		e.lastArrival = jobs[len(jobs)-1].ArrivalMS
+	}
 	idx := 0
 	for idx < len(jobs) || len(e.pending) > 0 || len(e.running) > 0 {
 		next := int64(^uint64(0) >> 1)
@@ -283,10 +288,29 @@ func (e *engine) integrate(dt int64) {
 			totalM += e.c.Cluster.MemoryGB
 		}
 	}
-	e.gpcArea += float64(usedG*int(dt)) / float64(totalG)
-	e.memArea += float64(usedM*int(dt)) / float64(totalM)
-	e.fragArea += frag * float64(dt)
-	e.strandedArea += stranded * float64(dt)
+	measurementStart := e.c.Limits.MeasurementStartMS
+	from, to := e.now, e.now+dt
+	if from < measurementStart {
+		from = measurementStart
+	}
+	if to > e.lastArrival {
+		to = e.lastArrival
+	}
+	if to > from {
+		window := to - from
+		e.measurementMS += window
+		e.gpcArea += float64(usedG*int(window)) / float64(totalG)
+		e.memArea += float64(usedM*int(window)) / float64(totalM)
+		e.fragArea += frag * float64(window)
+		e.strandedArea += stranded * float64(window)
+		if len(e.pending) > 0 {
+			e.backlogMS += window
+		}
+		util := float64(usedG) / float64(totalG)
+		if util > e.peakGPCUtilization {
+			e.peakGPCUtilization = util
+		}
+	}
 }
 
 func (e *engine) fragmentation() (float64, float64) {
@@ -376,16 +400,25 @@ func (e *engine) emit(kind string, j model.Job, n string, g int, msg string) {
 }
 
 func (e *engine) summary(total int) model.Summary {
-	s := model.Summary{Backend: e.backend.Name, Seed: e.c.Workload.Seed, Jobs: total, Completed: len(e.results), MakespanMS: e.now, MIGCreates: e.creates, MIGDeletes: e.deletes, MIGReconfigures: e.reconfigs, RequestFragmentationCount: e.reqFrag}
+	s := model.Summary{Backend: e.backend.Name, Seed: e.c.Workload.Seed, Jobs: total, Completed: len(e.results), MakespanMS: e.now, MIGCreates: e.creates, MIGDeletes: e.deletes, MIGReconfigures: e.reconfigs, RequestFragmentationCount: e.reqFrag, PeakGPCUtilization: e.peakGPCUtilization, MeasurementDurationMS: e.measurementMS}
+	if e.measurementMS > 0 {
+		s.BackloggedTimeFraction = float64(e.backlogMS) / float64(e.measurementMS)
+	}
+	s.HighLoadValid = s.PeakGPCUtilization >= e.c.Limits.MinPeakUtilization && s.BackloggedTimeFraction >= e.c.Limits.MinBacklogFraction
+	if !s.HighLoadValid {
+		s.HighLoadFailure = fmt.Sprintf("peak utilization %.3f < %.3f or backlog fraction %.3f < %.3f", s.PeakGPCUtilization, e.c.Limits.MinPeakUtilization, s.BackloggedTimeFraction, e.c.Limits.MinBacklogFraction)
+	}
 	if total > 0 {
 		s.SuccessRate = float64(len(e.results)) / float64(total)
 	}
 	if e.now > 0 {
 		s.ThroughputPerVirtualHour = float64(len(e.results)) * 3600000 / float64(e.now)
-		s.GPCUtilization = e.gpcArea / float64(e.now)
-		s.MemoryUtilization = e.memArea / float64(e.now)
-		s.MeanPhysicalFragmentation = e.fragArea / float64(e.now)
-		s.MeanStrandedCapacity = e.strandedArea / float64(e.now)
+	}
+	if e.measurementMS > 0 {
+		s.GPCUtilization = e.gpcArea / float64(e.measurementMS)
+		s.MemoryUtilization = e.memArea / float64(e.measurementMS)
+		s.MeanPhysicalFragmentation = e.fragArea / float64(e.measurementMS)
+		s.MeanStrandedCapacity = e.strandedArea / float64(e.measurementMS)
 	}
 	waits := make([]int64, 0, len(e.results))
 	var sw, sl int64

@@ -77,6 +77,12 @@ The first 20-seed resource-bound Azure run is documented in
 `outputs/RESOURCE-BOUND-AZURE-REPORT.md`; its complete evidence bundle is
 `outputs/migbench-v2-azure-results.tar.gz`.
 
+The default experiment is now a saturated fragmentation run: 56 prefill jobs
+occupy all GPC slots, compute duration has a 600-second median, and results are
+accepted only when peak GPC allocation reaches 99% and the pending queue is
+non-empty for at least 90% of the steady-state window. Validation results are
+in `outputs/SATURATED-FRAGMENTATION-REPORT.md`.
+
 ## Models and policies
 
 Workload models are `poisson`, `burst`, `profile-skew`, and `adversarial`.

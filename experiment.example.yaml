@@ -34,10 +34,13 @@ backends:
 workload:
   format: resource-bound-v2
   seed: 20260914
-  jobs: 250
+  jobs: 500
+  prefillJobs: 56
   model: poisson
-  arrivalMeanMS: 3000
-  durationMedianMS: 60000
+  # Offered load is intentionally above the estimated service rate. The
+  # prefill holds all 56 H100 GPC slots before the measurement window starts.
+  arrivalMeanMS: 15000
+  durationMedianMS: 600000
   durationSigma: 0.8
   repetitions: 1
   profileWeights:
@@ -54,3 +57,7 @@ costs:
 limits:
   schedulingTimeoutMS: 30000
   sampleEveryMS: 1000
+  measurementStartMS: 30000
+  minPeakUtilization: 0.99
+  minBacklogFraction: 0.90
+  requireHighLoad: true

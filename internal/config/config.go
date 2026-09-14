@@ -39,6 +39,7 @@ type Backend struct {
 
 type Workload struct {
 	Format           string             `yaml:"format" json:"format"`
+	PrefillJobs      int                `yaml:"prefillJobs" json:"prefillJobs"`
 	Seed             int64              `yaml:"seed" json:"seed"`
 	Jobs             int                `yaml:"jobs" json:"jobs"`
 	Model            string             `yaml:"model" json:"model"`
@@ -57,8 +58,12 @@ type Costs struct {
 }
 
 type Limits struct {
-	SchedulingTimeoutMS int64 `yaml:"schedulingTimeoutMS" json:"schedulingTimeoutMS"`
-	SampleEveryMS       int64 `yaml:"sampleEveryMS" json:"sampleEveryMS"`
+	SchedulingTimeoutMS int64   `yaml:"schedulingTimeoutMS" json:"schedulingTimeoutMS"`
+	SampleEveryMS       int64   `yaml:"sampleEveryMS" json:"sampleEveryMS"`
+	MeasurementStartMS  int64   `yaml:"measurementStartMS" json:"measurementStartMS"`
+	MinPeakUtilization  float64 `yaml:"minPeakUtilization" json:"minPeakUtilization"`
+	MinBacklogFraction  float64 `yaml:"minBacklogFraction" json:"minBacklogFraction"`
+	RequireHighLoad     bool    `yaml:"requireHighLoad" json:"requireHighLoad"`
 }
 
 func Load(path string) (Config, error) {
@@ -128,6 +133,12 @@ func (c *Config) defaults() {
 	}
 	if c.Limits.SampleEveryMS == 0 {
 		c.Limits.SampleEveryMS = 1000
+	}
+	if c.Limits.MinPeakUtilization == 0 {
+		c.Limits.MinPeakUtilization = .95
+	}
+	if c.Limits.MinBacklogFraction == 0 {
+		c.Limits.MinBacklogFraction = .90
 	}
 	for i := range c.Backends {
 		if c.Backends[i].Mode == "" {

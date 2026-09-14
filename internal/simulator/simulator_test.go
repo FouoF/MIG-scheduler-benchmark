@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/dynamia-ai/migbench/internal/config"
@@ -48,5 +49,26 @@ func TestResourceBoundRuntimeUsesAllocatedProfile(t *testing.T) {
 	got := r.Jobs[0]
 	if got.Profile != "2g.20gb" || got.RuntimeMS != 100 || got.AllocatedCompute != 28 {
 		t.Fatalf("unexpected resource-bound allocation: %+v", got)
+	}
+}
+
+func TestSaturatedWindowValidation(t *testing.T) {
+	c := tiny()
+	c.Limits.MeasurementStartMS = 1
+	c.Limits.MinPeakUtilization = .99
+	c.Limits.MinBacklogFraction = .90
+	var jobs []model.Job
+	for i := 0; i < 7; i++ {
+		jobs = append(jobs, model.Job{ID: fmt.Sprintf("fill-%d", i), DurationMS: 1000, Profile: "1g.10gb"})
+	}
+	for i := 0; i < 10; i++ {
+		jobs = append(jobs, model.Job{ID: fmt.Sprintf("queue-%d", i), ArrivalMS: int64(i + 1), DurationMS: 1000, Profile: "1g.10gb"})
+	}
+	r, err := Run(c, c.Backends[0], jobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Summary.HighLoadValid || r.Summary.PeakGPCUtilization != 1 || r.Summary.BackloggedTimeFraction < .90 {
+		t.Fatalf("expected saturated measurement window: %+v", r.Summary)
 	}
 }

@@ -76,6 +76,7 @@ func Run(args []string) error {
 	cfgRaw, _ := os.ReadFile(*cp)
 	_ = os.WriteFile(filepath.Join(*out, "experiment.yaml"), cfgRaw, 0644)
 	count := 0
+	var invalid []string
 	for _, b := range c.Backends {
 		if *only != "" && b.Name != *only {
 			continue
@@ -88,11 +89,17 @@ func Run(args []string) error {
 		if err := writeResult(dir, r, b); err != nil {
 			return err
 		}
-		fmt.Printf("%-20s completed=%d makespan=%dms mean-wait=%.1fms throughput=%.2f/h\n", b.Name, r.Summary.Completed, r.Summary.MakespanMS, r.Summary.MeanWaitMS, r.Summary.ThroughputPerVirtualHour)
+		fmt.Printf("%-20s completed=%d makespan=%dms mean-wait=%.1fms throughput=%.2f/h peak=%.1f%% backlog=%.1f%% valid=%t\n", b.Name, r.Summary.Completed, r.Summary.MakespanMS, r.Summary.MeanWaitMS, r.Summary.ThroughputPerVirtualHour, r.Summary.PeakGPCUtilization*100, r.Summary.BackloggedTimeFraction*100, r.Summary.HighLoadValid)
+		if c.Limits.RequireHighLoad && !r.Summary.HighLoadValid {
+			invalid = append(invalid, b.Name+": "+r.Summary.HighLoadFailure)
+		}
 		count++
 	}
 	if count == 0 {
 		return fmt.Errorf("no backend matched %q", *only)
+	}
+	if len(invalid) > 0 {
+		return fmt.Errorf("invalid non-saturated run: %s", strings.Join(invalid, "; "))
 	}
 	return nil
 }
@@ -202,9 +209,9 @@ func writeSummaryCSV(path string, s []model.Summary) error {
 	defer f.Close()
 	w := csv.NewWriter(f)
 	defer w.Flush()
-	_ = w.Write([]string{"backend", "jobs", "completed", "makespan_ms", "throughput_per_hour", "mean_wait_ms", "p95_wait_ms", "gpc_utilization", "memory_utilization", "physical_fragmentation", "stranded_capacity", "request_fragmentation", "mig_creates", "mig_deletes"})
+	_ = w.Write([]string{"backend", "jobs", "completed", "makespan_ms", "throughput_per_hour", "mean_wait_ms", "p95_wait_ms", "gpc_utilization", "memory_utilization", "physical_fragmentation", "stranded_capacity", "request_fragmentation", "mig_creates", "mig_deletes", "peak_gpc_utilization", "backlogged_time_fraction", "high_load_valid"})
 	for _, x := range s {
-		_ = w.Write([]string{x.Backend, strconv.Itoa(x.Jobs), strconv.Itoa(x.Completed), strconv.FormatInt(x.MakespanMS, 10), ff(x.ThroughputPerVirtualHour), ff(x.MeanWaitMS), ff(x.P95WaitMS), ff(x.GPCUtilization), ff(x.MemoryUtilization), ff(x.MeanPhysicalFragmentation), ff(x.MeanStrandedCapacity), strconv.Itoa(x.RequestFragmentationCount), strconv.Itoa(x.MIGCreates), strconv.Itoa(x.MIGDeletes)})
+		_ = w.Write([]string{x.Backend, strconv.Itoa(x.Jobs), strconv.Itoa(x.Completed), strconv.FormatInt(x.MakespanMS, 10), ff(x.ThroughputPerVirtualHour), ff(x.MeanWaitMS), ff(x.P95WaitMS), ff(x.GPCUtilization), ff(x.MemoryUtilization), ff(x.MeanPhysicalFragmentation), ff(x.MeanStrandedCapacity), strconv.Itoa(x.RequestFragmentationCount), strconv.Itoa(x.MIGCreates), strconv.Itoa(x.MIGDeletes), ff(x.PeakGPCUtilization), ff(x.BackloggedTimeFraction), strconv.FormatBool(x.HighLoadValid)})
 	}
 	return w.Error()
 }

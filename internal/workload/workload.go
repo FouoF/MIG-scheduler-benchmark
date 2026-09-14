@@ -26,10 +26,13 @@ func Generate(c config.Config) ([]model.Job, error) {
 	jobs := make([]model.Job, 0, c.Workload.Jobs)
 	var arrival int64
 	for i := 0; i < c.Workload.Jobs; i++ {
-		switch c.Workload.Model {
-		case "poisson", "profile-skew":
+		prefill := i < c.Workload.PrefillJobs
+		switch {
+		case prefill:
+			arrival = 0
+		case c.Workload.Model == "poisson" || c.Workload.Model == "profile-skew":
 			arrival += int64(r.ExpFloat64() * c.Workload.ArrivalMeanMS)
-		case "burst":
+		case c.Workload.Model == "burst":
 			bs := c.Workload.BurstSize
 			if bs < 1 {
 				bs = 10
@@ -37,12 +40,15 @@ func Generate(c config.Config) ([]model.Job, error) {
 			if i > 0 && i%bs == 0 {
 				arrival += int64(c.Workload.ArrivalMeanMS)
 			}
-		case "adversarial":
+		case c.Workload.Model == "adversarial":
 			arrival += int64(c.Workload.ArrivalMeanMS)
 		default:
 			return nil, fmt.Errorf("unknown workload model %q", c.Workload.Model)
 		}
 		p := choose(r, profiles, weights)
+		if prefill {
+			p = profiles[0]
+		}
 		if c.Workload.Model == "adversarial" {
 			if i < c.Workload.Jobs/2 {
 				p = profiles[0]

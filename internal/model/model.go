@@ -90,6 +90,11 @@ type Summary struct {
 	ReconfigureTimeMS         int64   `json:"reconfigureTimeMS"`
 	MeanSchedulingUS          float64 `json:"meanSchedulingUS"`
 	Timeouts                  int     `json:"timeouts"`
+	PeakGPCUtilization        float64 `json:"peakGPCUtilization"`
+	BackloggedTimeFraction    float64 `json:"backloggedTimeFraction"`
+	MeasurementDurationMS     int64   `json:"measurementDurationMS"`
+	HighLoadValid             bool    `json:"highLoadValid"`
+	HighLoadFailure           string  `json:"highLoadFailure,omitempty"`
 }
 
 func Now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
