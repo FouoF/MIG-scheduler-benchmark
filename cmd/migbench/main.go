@@ -23,6 +23,8 @@ func main() {
 		err = cli.Compare(os.Args[2:])
 	case "inspect":
 		err = cli.Inspect(os.Args[2:])
+	case "agent":
+		err = cli.Agent(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 		return
@@ -43,5 +45,6 @@ Usage:
   migbench run      -config experiment.yaml -trace trace.jsonl -out results
   migbench compare  -in results -out report.html
   migbench inspect  -events results/hami/events.jsonl [-job job-000001]
+  migbench agent    -backend hami|nvidia-dra -node NODE [-context CONTEXT]
 `)
 }

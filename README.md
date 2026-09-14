@@ -7,13 +7,14 @@ utilization, and multiple fragmentation measures.
 
 ## Fidelity boundary
 
-The benchmark executable is an **algorithm simulator** and labels its output as
-such. The repository additionally contains GPU-free control-plane fixtures for
-real scheduler contract tests. `hack/dra-smoke.sh` drives the native Kubernetes
-1.36 ResourceClaim allocator against H100 placement-aware ResourceSlices. HAMi
-is tested with its real scheduler/extender and mock device plugin; the mock node
-agent supplies inventory and acknowledges allocations. Neither path invokes
-NVML, CDI, a container runtime GPU hook, or real computation.
+The `run` command is an **algorithm simulator** and labels its output as such.
+The `agent` command is a scheduler-facing fake node agent: it publishes H100
+inventory to the Kubernetes API, observes decisions made by the real scheduler,
+validates their geometry, and acknowledges valid HAMi node locks. It never
+chooses a placement. `hack/dra-smoke.sh` drives the native Kubernetes 1.36
+ResourceClaim allocator against the agent's placement-aware ResourceSlices.
+Neither backend invokes NVML, CDI, a container runtime GPU hook, or real
+computation.
 
 `mode: control-plane` remains guarded in the simulator config: control-plane
 results are collected separately and must never be merged with virtual-time
@@ -34,6 +35,10 @@ go run ./cmd/migbench generate -config experiment.example.yaml -out work/trace.j
 go run ./cmd/migbench run -config experiment.example.yaml -trace work/trace.jsonl -out work/results
 go run ./cmd/migbench compare -in work/results -out work/results/report.html
 go run ./cmd/migbench inspect -events work/results/hami-optimized/events.jsonl -job job-000001
+
+# Run one agent per simulated node (four H100s on this node).
+go run ./cmd/migbench agent -backend nvidia-dra -node worker-0 -gpus 4 \
+  -events work/worker-0-events.jsonl
 ```
 
 Every run records the exact trace, config, backend lock metadata, normalized job
@@ -54,10 +59,23 @@ For NVIDIA DRA, create a kind cluster named `nvidia-dra` with worker
 hack/dra-smoke.sh
 ```
 
-The ResourceSlice fixture enumerates all legal 1g/2g/3g/7g placements on one
-H100. Shared counters make overlapping placements mutually exclusive. Pods are
-expected to stop at device preparation because there is intentionally no
-kubelet DRA plugin.
+The fake agent enumerates all legal 1g/2g/3g/7g placements for every simulated
+H100. Per-GPU shared counters make overlapping placements mutually exclusive
+without coupling separate physical GPUs. Pods are expected to stop at device
+preparation because there is intentionally no kubelet DRA plugin; allocation in
+the ResourceClaim is the scheduler decision being measured.
+
+For HAMi, run the same executable with `-backend hami`. It publishes the
+`hami.io/node-nvidia-register` topology understood by Dynamic MIG and patches
+the node's aggregate extended-resource capacity. Once the real HAMi scheduler
+writes `hami.io/vgpu-mig-allocations`, the agent validates the exact
+profile/start/size snapshot. Only then does it remove `hami.io/mutex.lock`.
+Malformed, overlapping, or impossible decisions terminate the run as backend
+errors instead of being counted as workload rejection.
+
+This agent intentionally implements the scheduler contract, not the kubelet
+device-plugin gRPC or DRA NodePrepare contract. That keeps Pod runtime and image
+pull latency out of a scheduling-only benchmark.
 
 `cloud/azure/provision.sh` creates an isolated 8-vCPU/32-GiB Ubuntu host. Export
 `AZURE_RESOURCE_GROUP` and run `cloud/azure/cleanup.sh` after copying artifacts;
