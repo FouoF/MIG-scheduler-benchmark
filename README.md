@@ -73,6 +73,10 @@ resource-bound jobs (`computeCoreMS + memoryMB`) and derives duration from the
 profile actually allocated. The original fixed-profile trace is retained only
 as a placement regression workload.
 
+The first 20-seed resource-bound Azure run is documented in
+`outputs/RESOURCE-BOUND-AZURE-REPORT.md`; its complete evidence bundle is
+`outputs/migbench-v2-azure-results.tar.gz`.
+
 ## Models and policies
 
 Workload models are `poisson`, `burst`, `profile-skew`, and `adversarial`.
