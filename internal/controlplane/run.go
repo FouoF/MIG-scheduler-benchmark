@@ -110,6 +110,18 @@ func Run(ctx context.Context, c config.Config, b config.Backend, jobs []model.Jo
 		}
 		e.agents = append(e.agents, a)
 	}
+	// HAMi's scheduler keeps its own node/device cache and learns fake inventory
+	// on a polling cycle. Keep that warm-up outside virtual time and per-job
+	// scheduling latency measurements.
+	if wait := registrationWait(b); wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
 	return e.run(ctx)
 }
 
@@ -200,12 +212,16 @@ func (e *engine) submit(ctx context.Context, j model.Job) error {
 }
 
 func (e *engine) deleteJob(ctx context.Context, id string) error {
-	args := []string{"delete", "pod", id, "-n", e.namespace, "--ignore-not-found=true", "--wait=false"}
+	// The simulated completion is instantaneous in virtual time, but the API
+	// object must be fully gone before capacity can be reused. Otherwise kubelet
+	// admission and a scheduler cache may briefly count different generations
+	// of the same slot, which leaks a deletion race into placement results.
+	args := []string{"delete", "pod", id, "-n", e.namespace, "--ignore-not-found=true", "--grace-period=0", "--force", "--wait=true"}
 	if _, err := e.api.Run(ctx, nil, args...); err != nil {
 		return err
 	}
 	if e.b.Kind == "nvidia-dra" {
-		_, err := e.api.Run(ctx, nil, "delete", "resourceclaim", id, "-n", e.namespace, "--ignore-not-found=true", "--wait=false")
+		_, err := e.api.Run(ctx, nil, "delete", "resourceclaim", id, "-n", e.namespace, "--ignore-not-found=true", "--wait=true")
 		return err
 	}
 	return nil
@@ -267,6 +283,9 @@ func (e *engine) acceptNewAllocations(attempt time.Time) error {
 		if !ok {
 			return fmt.Errorf("scheduler selected unknown profile %s", d.Profile)
 		}
+		if (j.Profile != "" && d.Profile != j.Profile) || p.MemoryMB < j.MemoryMB {
+			return fmt.Errorf("scheduler under-allocated job %s: requested profile=%s memory=%dMi, got %s memory=%dMi", id, j.Profile, j.MemoryMB, p.Name, p.MemoryMB)
+		}
 		runtime := j.DurationMS
 		if j.ComputeCoreMS > 0 {
 			runtime = (j.ComputeCoreMS + int64(p.Compute) - 1) / int64(p.Compute)
@@ -310,6 +329,22 @@ func splitNonEmpty(s string) []string {
 func parameterDuration(b config.Backend, key string, fallback time.Duration) time.Duration {
 	v, err := strconv.ParseInt(b.Parameters[key], 10, 64)
 	if err != nil || v <= 0 {
+		return fallback
+	}
+	return time.Duration(v) * time.Millisecond
+}
+
+func registrationWait(b config.Backend) time.Duration {
+	fallback := time.Duration(0)
+	if b.Kind == "hami" {
+		fallback = 16 * time.Second
+	}
+	raw, ok := b.Parameters["registrationWaitMS"]
+	if !ok {
+		return fallback
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 0 {
 		return fallback
 	}
 	return time.Duration(v) * time.Millisecond

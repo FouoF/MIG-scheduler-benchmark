@@ -174,7 +174,7 @@ func (e *engine) resolveProfile(j model.Job) (model.Profile, bool) {
 	}
 	var feasible []model.Profile
 	for _, p := range e.c.Cluster.Profiles {
-		if p.MemoryGB*1024 >= j.MemoryMB && p.ComputePercent >= j.MinComputePercent {
+		if p.MemoryGB*1024 >= j.MemoryMB {
 			feasible = append(feasible, p)
 		}
 	}

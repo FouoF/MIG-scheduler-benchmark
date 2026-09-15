@@ -104,6 +104,10 @@ Do not put release and master into the same control-plane invocation: backend
 deployment and Kubernetes state are deliberately outside the runner's mutation
 scope. `settleMS` is the post-change quiet window used to distinguish a stable
 pending queue from scheduler processing; keep it identical in paired runs.
+For HAMi, `registrationWaitMS` defaults to 16000 so the scheduler has observed
+the fake inventory before the first arrival. This one-time warm-up is excluded
+from virtual makespan and scheduling latency; set it to `0` only when the
+scheduler cache is already warm.
 On infrastructure failure, partial events, job results, native objects, backend
 lock metadata, and `infrastructure-error.txt` remain in the result directory.
 
@@ -120,6 +124,12 @@ The revised benchmark specification is `outputs/UPDATED-TEST-PLAN.md`. It uses
 resource-bound jobs (`computeCoreMS + memoryMB`) and derives duration from the
 profile actually allocated. The original fixed-profile trace is retained only
 as a placement regression workload.
+
+`computeCoreMS` is total compute work, not a minimum instantaneous compute
+guarantee. Memory is the hard scheduling constraint; a job allocated to a 3g
+profile runs for `computeCoreMS / 42%`. The saturated control-plane example uses
+the common profile subset supported by current HAMi DynamicMIG and NVIDIA DRA;
+see `experiment.control-plane.saturated.yaml`.
 
 The first 20-seed resource-bound Azure run is documented in
 `outputs/RESOURCE-BOUND-AZURE-REPORT.md`; its complete evidence bundle is

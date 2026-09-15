@@ -12,9 +12,10 @@ import (
 type objectList struct {
 	Items []struct {
 		Metadata struct {
-			Name        string            `json:"name"`
-			Namespace   string            `json:"namespace"`
-			Annotations map[string]string `json:"annotations"`
+			Name              string            `json:"name"`
+			Namespace         string            `json:"namespace"`
+			Annotations       map[string]string `json:"annotations"`
+			DeletionTimestamp string            `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec struct {
 			NodeName string `json:"nodeName"`
@@ -51,6 +52,9 @@ func (a *Agent) observeHAMi(ctx context.Context) ([]Decision, error) {
 	}
 	var out []Decision
 	for _, pod := range list.Items {
+		if pod.Metadata.DeletionTimestamp != "" {
+			continue
+		}
 		raw := pod.Metadata.Annotations["hami.io/vgpu-mig-allocations"]
 		if raw == "" || pod.Spec.NodeName != a.Node {
 			continue
@@ -80,6 +84,9 @@ func (a *Agent) observeDRA(ctx context.Context) ([]Decision, error) {
 	profiles := map[string]string{"1g10gb": "1g.10gb", "2g20gb": "2g.20gb", "3g40gb": "3g.40gb", "7g80gb": "7g.80gb"}
 	var out []Decision
 	for _, claim := range list.Items {
+		if claim.Metadata.DeletionTimestamp != "" {
+			continue
+		}
 		if claim.Status.Allocation == nil {
 			continue
 		}

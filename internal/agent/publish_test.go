@@ -72,6 +72,9 @@ func TestPublishHAMiMultipleGPUs(t *testing.T) {
 	if !strings.Contains(patch, `"nvidia.com/gpu":"14"`) {
 		t.Fatalf("node capacity does not contain 14 MIG slots: %s", patch)
 	}
+	if !strings.Contains(patch, `"nvidia.com/gpucores":"200000"`) {
+		t.Fatalf("node capacity does not contain the non-binding admission shim: %s", patch)
+	}
 	annotation := fake.calls[1][3]
 	parts := strings.SplitN(annotation, "=", 2)
 	if len(parts) != 2 {

@@ -40,7 +40,7 @@ func TestPrefillOverridesAdversarialPhase(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 7; i++ {
-		if jobs[i].MemoryMB != 10240 || jobs[i].MinComputePercent != 14 {
+		if jobs[i].MemoryMB != 10240 || jobs[i].ComputeCoreMS < 1 || jobs[i].MinComputePercent != 0 {
 			t.Fatalf("prefill job %d was overridden: %+v", i, jobs[i])
 		}
 	}

@@ -41,13 +41,13 @@ func TestFragmentedRequestRecorded(t *testing.T) {
 
 func TestResourceBoundRuntimeUsesAllocatedProfile(t *testing.T) {
 	c := tiny()
-	jobs := []model.Job{{ID: "work", Format: "resource-bound-v2", ComputeCoreMS: 2800, MemoryMB: 18000, MinComputePercent: 20}}
+	jobs := []model.Job{{ID: "work", Format: "resource-bound-v2", ComputeCoreMS: 2800, MemoryMB: 18000}}
 	r, err := Run(c, c.Backends[0], jobs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := r.Jobs[0]
-	if got.Profile != "2g.20gb" || got.RuntimeMS != 100 || got.AllocatedCompute != 28 {
+	if got.Profile != "1g.20gb" || got.RuntimeMS != 200 || got.AllocatedCompute != 14 {
 		t.Fatalf("unexpected resource-bound allocation: %+v", got)
 	}
 }

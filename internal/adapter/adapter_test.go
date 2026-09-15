@@ -31,6 +31,16 @@ func TestDRAResourceBoundUsesQuantityComparison(t *testing.T) {
 	if !strings.Contains(string(b), ".compareTo(quantity(") {
 		t.Fatalf("resource selector does not use Kubernetes Quantity comparison: %s", b)
 	}
+	if strings.Contains(string(b), "multiprocessors") {
+		t.Fatalf("core-time workload was converted into a hard compute minimum: %s", b)
+	}
+	hami, err := New(config.Backend{Name: "hami", Kind: "hami"}).Objects(j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hami), `"nvidia.com/gpucores": 1`) {
+		t.Fatalf("HAMi resource-bound request does not use the protocol minimum: %s", hami)
+	}
 }
 
 func TestPolicies(t *testing.T) {

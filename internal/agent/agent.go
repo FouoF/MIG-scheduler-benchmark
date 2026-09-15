@@ -112,9 +112,18 @@ func (a *Agent) publishHAMi(ctx context.Context) error {
 	if a.GPUs < 1 {
 		return fmt.Errorf("GPU count must be positive")
 	}
+	// HAMi accounts MIG feasibility from its device inventory and placement
+	// annotations. These scalar resources are only a kubelet admission shim in
+	// the no-device-plugin environment. Keep the instance count physical, but
+	// make core/memory non-binding so Kubernetes' node-level sum of minimum
+	// requests cannot conflict with HAMi's per-GPU selected-profile accounting.
+	resources := map[string]string{
+		"nvidia.com/gpu":      fmt.Sprint(7 * a.GPUs),
+		"nvidia.com/gpumem":   fmt.Sprint(81920 * a.GPUs * 1000),
+		"nvidia.com/gpucores": fmt.Sprint(100 * a.GPUs * 1000),
+	}
 	status := map[string]any{"status": map[string]any{
-		"capacity":    map[string]string{"nvidia.com/gpu": fmt.Sprint(7 * a.GPUs), "nvidia.com/gpumem": fmt.Sprint(81920 * a.GPUs), "nvidia.com/gpucores": fmt.Sprint(100 * a.GPUs)},
-		"allocatable": map[string]string{"nvidia.com/gpu": fmt.Sprint(7 * a.GPUs), "nvidia.com/gpumem": fmt.Sprint(81920 * a.GPUs), "nvidia.com/gpucores": fmt.Sprint(100 * a.GPUs)},
+		"capacity": resources, "allocatable": resources,
 	}}
 	b, _ := json.Marshal(status)
 	if _, err := a.Kubectl.Run(ctx, nil, "patch", "node", a.Node, "--subresource=status", "--type=merge", "-p", string(b)); err != nil {

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dynamia-ai/migbench/internal/config"
 	"github.com/dynamia-ai/migbench/internal/model"
@@ -87,5 +88,20 @@ func TestRunAdvancesVirtualTimeWhileUsingSchedulerPlacements(t *testing.T) {
 func TestJobFromKey(t *testing.T) {
 	if got := jobFromKey("namespace/job-1/0"); got != "job-1" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRegistrationWait(t *testing.T) {
+	hami := config.Backend{Kind: "hami", Parameters: map[string]string{}}
+	if got := registrationWait(hami); got != 16*time.Second {
+		t.Fatalf("HAMi default registration wait = %s", got)
+	}
+	hami.Parameters["registrationWaitMS"] = "0"
+	if got := registrationWait(hami); got != 0 {
+		t.Fatalf("explicit registration wait = %s", got)
+	}
+	dra := config.Backend{Kind: "nvidia-dra", Parameters: map[string]string{}}
+	if got := registrationWait(dra); got != 0 {
+		t.Fatalf("DRA registration wait = %s", got)
 	}
 }

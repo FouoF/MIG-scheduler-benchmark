@@ -18,6 +18,8 @@ backends:
       kubeContext: kind-hami-master
       nodes: hami-master-worker
       namespace: default
+      # One-time scheduler cache warm-up, excluded from all benchmark metrics.
+      registrationWaitMS: "16000"
       settleMS: "500"
       pollMS: "50"
 workload:

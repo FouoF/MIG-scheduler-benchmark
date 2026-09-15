@@ -66,7 +66,6 @@ func Generate(c config.Config) ([]model.Job, error) {
 		} else {
 			profile := profileByName(c.Cluster.Profiles, p)
 			job.MemoryMB = profile.MemoryGB * 1024
-			job.MinComputePercent = profile.ComputePercent
 			job.ComputeCoreMS = d * int64(profile.ComputePercent)
 		}
 		jobs = append(jobs, job)

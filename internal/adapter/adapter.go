@@ -61,8 +61,11 @@ func (b *builtin) Objects(j model.Job) ([]byte, error) {
 		if j.MemoryMB > 0 {
 			limits["nvidia.com/gpumem"] = j.MemoryMB
 		}
-		if j.MinComputePercent > 0 {
-			limits["nvidia.com/gpucores"] = j.MinComputePercent
+		if j.ComputeCoreMS > 0 {
+			// Resource-bound work has no instantaneous-compute SLA. HAMi still
+			// requires a positive core request, so use the protocol minimum and
+			// derive completion time from the profile it actually allocates.
+			limits["nvidia.com/gpucores"] = 1
 		}
 		spec := map[string]any{"schedulerName": "hami-scheduler", "containers": []any{map[string]any{"name": "workload", "image": "registry.k8s.io/pause:3.10.1", "resources": map[string]any{"limits": limits}}}}
 		if len(j.NodeSelector) > 0 {
@@ -72,7 +75,7 @@ func (b *builtin) Objects(j model.Job) ([]byte, error) {
 	case "nvidia-dra":
 		expr := fmt.Sprintf("device.attributes['gpu.nvidia.com'].profile == %q", j.Profile)
 		if j.MemoryMB > 0 {
-			expr = fmt.Sprintf("device.attributes['gpu.nvidia.com'].type == 'mig' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('%dMi')) >= 0 && device.capacity['gpu.nvidia.com'].multiprocessors.compareTo(quantity('%d')) >= 0", j.MemoryMB, j.MinComputePercent)
+			expr = fmt.Sprintf("device.attributes['gpu.nvidia.com'].type == 'mig' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('%dMi')) >= 0", j.MemoryMB)
 		}
 		podSpec := map[string]any{"resourceClaims": []any{map[string]any{"name": "gpu", "resourceClaimName": j.ID}}, "containers": []any{map[string]any{"name": "workload", "image": "registry.k8s.io/pause:3.10", "resources": map[string]any{"claims": []any{map[string]string{"name": "gpu"}}}}}}
 		if len(j.NodeSelector) > 0 {

@@ -1,0 +1,76 @@
+name: h100-control-plane-saturated
+cluster:
+  nodes: 2
+  gpusPerNode: 4
+  model: H100-80GB
+  gpcPerGPU: 7
+  memoryGB: 80
+  # Common subset: current HAMi DynamicMIG does not expose a 4g profile.
+  profiles:
+    - {name: 1g.10gb, gpc: 1, memoryGB: 10, computePercent: 14, placements: [0, 1, 2, 3, 4, 5, 6]}
+    - {name: 2g.20gb, gpc: 2, memoryGB: 20, computePercent: 28, placements: [0, 2, 4]}
+    - {name: 3g.40gb, gpc: 3, memoryGB: 40, computePercent: 42, placements: [0, 4]}
+    - {name: 7g.80gb, gpc: 7, memoryGB: 80, computePercent: 100, placements: [0]}
+backends:
+  - name: hami-release-v2.10.0
+    kind: hami
+    mode: control-plane
+    gitRef: v2.10.0
+    image: projecthami/hami@sha256:8c45cd84d8df3e6a8fe8c95e0141684973b5015692a0ef87588da05284f34447
+    manifestChecksum: 6b45ba335e661e2feffa8246951bb2bf5f78eef8e5d98ba5d9d26272f8d44131
+    parameters: &control
+      kubeContext: kind-migbench
+      nodes: migbench-worker,migbench-worker2
+      namespace: default
+      registrationWaitMS: "16000"
+      settleMS: "500"
+      pollMS: "50"
+      # Deploy both HAMi variants with --kube-qps=100 --kube-burst=200.
+      deployKubeQPS: "100"
+      deployKubeBurst: "200"
+  - name: hami-master-6c17a8f
+    kind: hami
+    mode: control-plane
+    gitRef: 6c17a8f9fe5a186b1ca763884a40fa6b40b6307d
+    image: local-build@sha256:7960be025f2888a60f1ef36dcdf80beda62e6c73f07113a1804a285492cf1c52
+    manifestChecksum: e95ab345ab61fcca98b5ac9b67cf0f0aa73f5cef9e3deb6780f02d8e01188055
+    parameters: *control
+  - name: nvidia-dra-v0.5.0
+    kind: nvidia-dra
+    mode: control-plane
+    gitRef: v0.5.0
+    image: registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu@sha256:e1f104e64383ee693e982a5e6b7cf0b750023aaa5cc9b7dcc37c8e0549232933
+    manifestChecksum: 23b9e008c5cd68e184ac758b4feb292b03a1aa5527d4162e88100d02b9f5c60a
+    parameters:
+      kubeContext: kind-migbench
+      nodes: migbench-worker,migbench-worker2
+      namespace: default
+      registrationWaitMS: "0"
+      settleMS: "500"
+      pollMS: "50"
+workload:
+  format: resource-bound-v2
+  seed: 20260914
+  jobs: 500
+  prefillJobs: 56
+  model: poisson
+  arrivalMeanMS: 15000
+  durationMedianMS: 600000
+  durationSigma: 0.8
+  repetitions: 1
+  profileWeights:
+    1g.10gb: 35
+    2g.20gb: 25
+    3g.40gb: 25
+    7g.80gb: 5
+costs:
+  createMS: 250
+  deleteMS: 100
+  reconfigureMS: 1500
+limits:
+  schedulingTimeoutMS: 30000
+  sampleEveryMS: 1000
+  measurementStartMS: 30000
+  minPeakUtilization: 0.99
+  minBacklogFraction: 0.90
+  requireHighLoad: true
