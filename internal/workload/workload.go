@@ -49,7 +49,7 @@ func Generate(c config.Config) ([]model.Job, error) {
 		if prefill {
 			p = profiles[0]
 		}
-		if c.Workload.Model == "adversarial" {
+		if !prefill && c.Workload.Model == "adversarial" {
 			if i < c.Workload.Jobs/2 {
 				p = profiles[0]
 			} else {

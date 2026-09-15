@@ -181,7 +181,12 @@ func (c Config) Validate() error {
 			return fmt.Errorf("backend %s: invalid mode %q", b.Name, b.Mode)
 		}
 		if b.Mode == "control-plane" {
-			return fmt.Errorf("backend %s: control-plane bridge is not configured; use simulated mode or provide a future bridge implementation", b.Name)
+			if b.Kind == "baseline" {
+				return fmt.Errorf("backend %s: baseline does not have a Kubernetes control-plane mode", b.Name)
+			}
+			if b.Parameters["nodes"] == "" {
+				return fmt.Errorf("backend %s: control-plane mode requires parameters.nodes", b.Name)
+			}
 		}
 	}
 	for p := range c.Workload.ProfileWeights {

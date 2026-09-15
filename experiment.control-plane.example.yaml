@@ -1,0 +1,50 @@
+name: h100-control-plane-smoke
+cluster:
+  nodes: 1
+  gpusPerNode: 1
+  model: H100-80GB
+  gpcPerGPU: 7
+  memoryGB: 80
+backends:
+  # Run one control-plane backend per freshly created cluster. Change kind,
+  # version locks, context, and node name for the backend under test.
+  - name: hami-master-88b118e
+    kind: hami
+    mode: control-plane
+    gitRef: 88b118e565a9effaa27f81669da291c5508fc5e4
+    image: local-build@sha256:08b88af4a397b21ab18ddc5adee17b8cda4da2702c9204ffa4515ae7643a9327
+    manifestChecksum: 4a7623662b3f476d8b3497e173b56e075ac869b3d61373bf8e7a472eed6108e6
+    parameters:
+      kubeContext: kind-hami-master
+      nodes: hami-master-worker
+      namespace: default
+      settleMS: "500"
+      pollMS: "50"
+workload:
+  format: resource-bound-v2
+  seed: 20260914
+  jobs: 24
+  prefillJobs: 7
+  model: adversarial
+  arrivalMeanMS: 15000
+  durationMedianMS: 600000
+  durationSigma: 0.4
+  repetitions: 1
+  profileWeights:
+    1g.10gb: 35
+    1g.20gb: 10
+    2g.20gb: 25
+    3g.40gb: 15
+    4g.40gb: 10
+    7g.80gb: 5
+costs:
+  createMS: 250
+  deleteMS: 100
+  reconfigureMS: 1500
+limits:
+  schedulingTimeoutMS: 30000
+  sampleEveryMS: 1000
+  measurementStartMS: 30000
+  minPeakUtilization: 0.99
+  minBacklogFraction: 0.90
+  requireHighLoad: true

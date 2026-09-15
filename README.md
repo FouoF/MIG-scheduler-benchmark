@@ -16,9 +16,9 @@ ResourceClaim allocator against the agent's placement-aware ResourceSlices.
 Neither backend invokes NVML, CDI, a container runtime GPU hook, or real
 computation.
 
-`mode: control-plane` remains guarded in the simulator config: control-plane
-results are collected separately and must never be merged with virtual-time
-numbers merely because their backend names match.
+`mode: control-plane` uses the real Kubernetes scheduling path described below.
+The CLI rejects attempts to merge control-plane and algorithm-simulator output
+in one run.
 
 ## Quick start
 
@@ -76,6 +76,36 @@ errors instead of being counted as workload rejection.
 This agent intentionally implements the scheduler contract, not the kubelet
 device-plugin gRPC or DRA NodePrepare contract. That keeps Pod runtime and image
 pull latency out of a scheduling-only benchmark.
+
+## Real control-plane trace replay
+
+Set a backend's `mode` to `control-plane`, list the exact worker node names in
+`parameters.nodes`, and run the normal command against an already deployed
+backend:
+
+```sh
+go run ./cmd/migbench generate \
+  -config experiment.control-plane.example.yaml -out work/control-trace.jsonl
+go run ./cmd/migbench run \
+  -config experiment.control-plane.example.yaml \
+  -trace work/control-trace.jsonl -out work/control-results
+```
+
+The runner starts one in-process fake agent per listed node, submits the native
+Pod or ResourceClaim+Pod objects, and records placements chosen by the real
+scheduler. Workload arrival, `computeCoreMS / allocatedCompute`, and completion
+use virtual time. API scheduling latency remains wall-clock data. At virtual
+completion the runner deletes the Pod and, for DRA, its ResourceClaim, which
+unblocks queued work without waiting for the simulated compute duration in real
+time.
+
+Run each control-plane backend in a fresh cluster and use the same trace file.
+Do not put release and master into the same control-plane invocation: backend
+deployment and Kubernetes state are deliberately outside the runner's mutation
+scope. `settleMS` is the post-change quiet window used to distinguish a stable
+pending queue from scheduler processing; keep it identical in paired runs.
+On infrastructure failure, partial events, job results, native objects, backend
+lock metadata, and `infrastructure-error.txt` remain in the result directory.
 
 `cloud/azure/provision.sh` creates an isolated 8-vCPU/32-GiB Ubuntu host. Export
 `AZURE_RESOURCE_GROUP` and run `cloud/azure/cleanup.sh` after copying artifacts;

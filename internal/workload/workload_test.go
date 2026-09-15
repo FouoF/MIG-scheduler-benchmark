@@ -32,3 +32,19 @@ func TestAdversarialOrdersSmallThenLarge(t *testing.T) {
 		t.Fatalf("unexpected profiles: %#v", j)
 	}
 }
+
+func TestPrefillOverridesAdversarialPhase(t *testing.T) {
+	c := config.Config{Cluster: config.Cluster{Profiles: config.H100Profiles()}, Workload: config.Workload{Seed: 1, Jobs: 8, PrefillJobs: 7, Model: "adversarial", ArrivalMeanMS: 1, DurationMedianMS: 1, DurationSigma: .1}}
+	jobs, err := Generate(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 7; i++ {
+		if jobs[i].MemoryMB != 10240 || jobs[i].MinComputePercent != 14 {
+			t.Fatalf("prefill job %d was overridden: %+v", i, jobs[i])
+		}
+	}
+	if jobs[7].MemoryMB != 81920 {
+		t.Fatalf("post-prefill adversarial job is not large: %+v", jobs[7])
+	}
+}

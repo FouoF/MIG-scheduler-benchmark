@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
@@ -9,12 +10,16 @@ import (
 	"html/template"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
+	"github.com/dynamia-ai/migbench/internal/agent"
 	"github.com/dynamia-ai/migbench/internal/config"
+	"github.com/dynamia-ai/migbench/internal/controlplane"
 	"github.com/dynamia-ai/migbench/internal/model"
 	"github.com/dynamia-ai/migbench/internal/simulator"
 	"github.com/dynamia-ai/migbench/internal/workload"
@@ -58,6 +63,18 @@ func Run(args []string) error {
 	if err != nil {
 		return err
 	}
+	selectedModes := map[string]int{}
+	for _, b := range c.Backends {
+		if *only == "" || b.Name == *only {
+			selectedModes[b.Mode]++
+		}
+	}
+	if len(selectedModes) > 1 {
+		return fmt.Errorf("refusing to mix simulated and control-plane results; select one backend with -backend")
+	}
+	if selectedModes["control-plane"] > 1 {
+		return fmt.Errorf("control-plane backends require fresh isolated clusters; select one backend with -backend")
+	}
 	var jobs []model.Job
 	if *tp == "" {
 		jobs, err = workload.Generate(c)
@@ -77,21 +94,39 @@ func Run(args []string) error {
 	_ = os.WriteFile(filepath.Join(*out, "experiment.yaml"), cfgRaw, 0644)
 	count := 0
 	var invalid []string
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	for _, b := range c.Backends {
 		if *only != "" && b.Name != *only {
 			continue
 		}
-		r, err := simulator.Run(c, b, jobs)
-		if err != nil {
-			return fmt.Errorf("backend %s: %w", b.Name, err)
-		}
 		dir := filepath.Join(*out, safe(b.Name))
-		if err := writeResult(dir, r, b); err != nil {
-			return err
+		var summary model.Summary
+		if b.Mode == "control-plane" {
+			api := agent.Kubectl{Path: b.Parameters["kubectl"], Context: b.Parameters["kubeContext"]}
+			r, runErr := controlplane.Run(ctx, c, b, jobs, api)
+			if runErr != nil {
+				_ = writeArtifacts(dir, r.Summary, r.Events, r.Jobs, r.Objects, b)
+				_ = os.WriteFile(filepath.Join(dir, "infrastructure-error.txt"), []byte(runErr.Error()+"\n"), 0644)
+				return fmt.Errorf("backend %s: %w", b.Name, runErr)
+			}
+			if err := writeArtifacts(dir, r.Summary, r.Events, r.Jobs, r.Objects, b); err != nil {
+				return err
+			}
+			summary = r.Summary
+		} else {
+			r, runErr := simulator.Run(c, b, jobs)
+			if runErr != nil {
+				return fmt.Errorf("backend %s: %w", b.Name, runErr)
+			}
+			if err := writeResult(dir, r, b); err != nil {
+				return err
+			}
+			summary = r.Summary
 		}
-		fmt.Printf("%-20s completed=%d makespan=%dms mean-wait=%.1fms throughput=%.2f/h peak=%.1f%% backlog=%.1f%% valid=%t\n", b.Name, r.Summary.Completed, r.Summary.MakespanMS, r.Summary.MeanWaitMS, r.Summary.ThroughputPerVirtualHour, r.Summary.PeakGPCUtilization*100, r.Summary.BackloggedTimeFraction*100, r.Summary.HighLoadValid)
-		if c.Limits.RequireHighLoad && !r.Summary.HighLoadValid {
-			invalid = append(invalid, b.Name+": "+r.Summary.HighLoadFailure)
+		fmt.Printf("%-20s completed=%d makespan=%dms mean-wait=%.1fms throughput=%.2f/h peak=%.1f%% backlog=%.1f%% valid=%t\n", b.Name, summary.Completed, summary.MakespanMS, summary.MeanWaitMS, summary.ThroughputPerVirtualHour, summary.PeakGPCUtilization*100, summary.BackloggedTimeFraction*100, summary.HighLoadValid)
+		if c.Limits.RequireHighLoad && !summary.HighLoadValid {
+			invalid = append(invalid, b.Name+": "+summary.HighLoadFailure)
 		}
 		count++
 	}
@@ -105,22 +140,26 @@ func Run(args []string) error {
 }
 
 func writeResult(dir string, r simulator.Result, b config.Backend) error {
+	return writeArtifacts(dir, r.Summary, r.Events, r.Jobs, r.Objects, b)
+}
+
+func writeArtifacts(dir string, summary model.Summary, events []model.Event, jobs []model.JobResult, objects map[string]string, b config.Backend) error {
 	if err := os.MkdirAll(filepath.Join(dir, "objects"), 0755); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(dir, "summary.json"), r.Summary); err != nil {
+	if err := writeJSON(filepath.Join(dir, "summary.json"), summary); err != nil {
 		return err
 	}
-	if err := writeJSONL(filepath.Join(dir, "events.jsonl"), r.Events); err != nil {
+	if err := writeJSONL(filepath.Join(dir, "events.jsonl"), events); err != nil {
 		return err
 	}
-	if err := writeJSONL(filepath.Join(dir, "jobs.jsonl"), r.Jobs); err != nil {
+	if err := writeJSONL(filepath.Join(dir, "jobs.jsonl"), jobs); err != nil {
 		return err
 	}
 	if err := writeJSON(filepath.Join(dir, "backend.lock.json"), b); err != nil {
 		return err
 	}
-	for id, raw := range r.Objects {
+	for id, raw := range objects {
 		if err := os.WriteFile(filepath.Join(dir, "objects", safe(id)+".json"), []byte(raw), 0644); err != nil {
 			return err
 		}

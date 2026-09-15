@@ -64,15 +64,23 @@ func (b *builtin) Objects(j model.Job) ([]byte, error) {
 		if j.MinComputePercent > 0 {
 			limits["nvidia.com/gpucores"] = j.MinComputePercent
 		}
-		obj = map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": j.ID, "annotations": map[string]string{"hami.io/vgpu-mode": "mig", "migbench.io/profile": j.Profile, "migbench.io/compute-core-ms": fmt.Sprint(j.ComputeCoreMS)}}, "spec": map[string]any{"schedulerName": "hami-scheduler", "containers": []any{map[string]any{"name": "workload", "image": "registry.k8s.io/pause:3.10.1", "resources": map[string]any{"limits": limits}}}}}
+		spec := map[string]any{"schedulerName": "hami-scheduler", "containers": []any{map[string]any{"name": "workload", "image": "registry.k8s.io/pause:3.10.1", "resources": map[string]any{"limits": limits}}}}
+		if len(j.NodeSelector) > 0 {
+			spec["nodeSelector"] = j.NodeSelector
+		}
+		obj = map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": j.ID, "annotations": map[string]string{"hami.io/vgpu-mode": "mig", "migbench.io/profile": j.Profile, "migbench.io/compute-core-ms": fmt.Sprint(j.ComputeCoreMS)}}, "spec": spec}
 	case "nvidia-dra":
 		expr := fmt.Sprintf("device.attributes['gpu.nvidia.com'].profile == %q", j.Profile)
 		if j.MemoryMB > 0 {
 			expr = fmt.Sprintf("device.attributes['gpu.nvidia.com'].type == 'mig' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('%dMi')) >= 0 && device.capacity['gpu.nvidia.com'].multiprocessors.compareTo(quantity('%d')) >= 0", j.MemoryMB, j.MinComputePercent)
 		}
+		podSpec := map[string]any{"resourceClaims": []any{map[string]any{"name": "gpu", "resourceClaimName": j.ID}}, "containers": []any{map[string]any{"name": "workload", "image": "registry.k8s.io/pause:3.10", "resources": map[string]any{"claims": []any{map[string]string{"name": "gpu"}}}}}}
+		if len(j.NodeSelector) > 0 {
+			podSpec["nodeSelector"] = j.NodeSelector
+		}
 		obj = []any{
 			map[string]any{"apiVersion": "resource.k8s.io/v1", "kind": "ResourceClaim", "metadata": map[string]any{"name": j.ID, "annotations": map[string]string{"migbench.io/compute-core-ms": fmt.Sprint(j.ComputeCoreMS)}}, "spec": map[string]any{"devices": map[string]any{"requests": []any{map[string]any{"name": "gpu", "exactly": map[string]any{"deviceClassName": "mig.nvidia.com", "selectors": []any{map[string]any{"cel": map[string]string{"expression": expr}}}}}}}}},
-			map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": j.ID}, "spec": map[string]any{"resourceClaims": []any{map[string]any{"name": "gpu", "resourceClaimName": j.ID}}, "containers": []any{map[string]any{"name": "workload", "image": "registry.k8s.io/pause:3.10", "resources": map[string]any{"claims": []any{map[string]string{"name": "gpu"}}}}}}},
+			map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": j.ID}, "spec": podSpec},
 		}
 	default:
 		return nil, fmt.Errorf("unsupported adapter kind %q", b.cfg.Kind)
