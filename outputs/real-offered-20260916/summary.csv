@@ -1,0 +1,4 @@
+backend,jobs,completed,makespan_ms,throughput_per_hour,mean_wait_ms,p95_wait_ms,gpc_utilization,memory_utilization,physical_fragmentation,stranded_capacity,request_fragmentation,mig_creates,mig_deletes,peak_gpc_utilization,backlogged_time_fraction,high_load_valid
+hami-master-684c5f74,500,500,29282173,61.4708,1910064.0580,10337851.6000,0.8712,0.8257,0.0421,0.0190,277,500,500,1.0000,0.8997,true
+hami-release-v2.10.0,500,500,29199026,61.6459,1996134.1320,10601687.7500,0.8686,0.8238,0.0321,0.0302,252,500,500,1.0000,0.8927,true
+nvidia-dra-v0.5.0,500,500,29195586,61.6532,2119875.2480,12714828.2000,0.8532,0.8065,0.0547,0.0530,261,500,500,1.0000,0.8920,true
