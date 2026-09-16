@@ -24,32 +24,9 @@ func Generate(c config.Config) ([]model.Job, error) {
 		return nil, err
 	}
 	jobs := make([]model.Job, 0, c.Workload.Jobs)
-	var arrival int64
 	for i := 0; i < c.Workload.Jobs; i++ {
-		prefill := i < c.Workload.PrefillJobs
-		switch {
-		case prefill:
-			arrival = 0
-		case c.Workload.Model == "poisson" || c.Workload.Model == "profile-skew":
-			arrival += int64(r.ExpFloat64() * c.Workload.ArrivalMeanMS)
-		case c.Workload.Model == "burst":
-			bs := c.Workload.BurstSize
-			if bs < 1 {
-				bs = 10
-			}
-			if i > 0 && i%bs == 0 {
-				arrival += int64(c.Workload.ArrivalMeanMS)
-			}
-		case c.Workload.Model == "adversarial":
-			arrival += int64(c.Workload.ArrivalMeanMS)
-		default:
-			return nil, fmt.Errorf("unknown workload model %q", c.Workload.Model)
-		}
 		p := choose(r, profiles, weights)
-		if prefill {
-			p = profiles[0]
-		}
-		if !prefill && c.Workload.Model == "adversarial" {
+		if c.Workload.Model == "adversarial" {
 			if i < c.Workload.Jobs/2 {
 				p = profiles[0]
 			} else {
@@ -60,7 +37,7 @@ func Generate(c config.Config) ([]model.Job, error) {
 		if d < 1 {
 			d = 1
 		}
-		job := model.Job{ID: fmt.Sprintf("job-%06d", i+1), Format: format, ArrivalMS: arrival}
+		job := model.Job{ID: fmt.Sprintf("job-%06d", i+1), Format: format}
 		if format == "profile-bound-v1" {
 			job.DurationMS, job.Profile = d, p
 		} else {
@@ -70,7 +47,75 @@ func Generate(c config.Config) ([]model.Job, error) {
 		}
 		jobs = append(jobs, job)
 	}
+	arrivalMean, err := arrivalMeanMS(c, jobs)
+	if err != nil {
+		return nil, err
+	}
+	// Keep arrival randomness independent from profile and duration draws. This
+	// makes load-control changes leave the resource sequence untouched.
+	ar := rand.New(rand.NewPCG(uint64(c.Workload.Seed)^0xd1b54a32d192ed03, uint64(c.Workload.Seed)^0x94d049bb133111eb))
+	var arrival int64
+	for i := range jobs {
+		switch c.Workload.Model {
+		case "poisson", "profile-skew":
+			arrival += int64(ar.ExpFloat64() * arrivalMean)
+		case "burst":
+			bs := c.Workload.BurstSize
+			if bs < 1 {
+				bs = 10
+			}
+			if i > 0 && i%bs == 0 {
+				arrival += int64(arrivalMean * float64(bs))
+			}
+		case "adversarial":
+			arrival += int64(arrivalMean)
+		default:
+			return nil, fmt.Errorf("unknown workload model %q", c.Workload.Model)
+		}
+		jobs[i].ArrivalMS = arrival
+	}
 	return jobs, nil
+}
+
+func arrivalMeanMS(c config.Config, jobs []model.Job) (float64, error) {
+	if c.Workload.ArrivalMeanMS > 0 {
+		return c.Workload.ArrivalMeanMS, nil
+	}
+	if c.Workload.TargetOfferedLoad <= 0 {
+		return 0, fmt.Errorf("targetOfferedLoad or arrivalMeanMS must be positive")
+	}
+	totalGPC := c.Cluster.Nodes * c.Cluster.GPUsPerNode * c.Cluster.GPCPerGPU
+	if totalGPC <= 0 || len(jobs) == 0 {
+		return 0, fmt.Errorf("cannot derive arrival rate without jobs and cluster capacity")
+	}
+	var occupiedGPCMS float64
+	for _, j := range jobs {
+		if j.Profile != "" {
+			p := profileByName(c.Cluster.Profiles, j.Profile)
+			occupiedGPCMS += float64(p.GPC) * float64(j.DurationMS)
+			continue
+		}
+		p, ok := smallestProfileForMemory(c.Cluster.Profiles, j.MemoryMB)
+		if !ok {
+			return 0, fmt.Errorf("job %s memory request has no feasible profile", j.ID)
+		}
+		runtime := (j.ComputeCoreMS + int64(p.ComputePercent) - 1) / int64(p.ComputePercent)
+		occupiedGPCMS += float64(p.GPC) * float64(runtime)
+	}
+	return occupiedGPCMS / float64(len(jobs)*totalGPC) / c.Workload.TargetOfferedLoad, nil
+}
+
+func smallestProfileForMemory(profiles []model.Profile, memoryMB int) (model.Profile, bool) {
+	ps := append([]model.Profile(nil), profiles...)
+	sort.Slice(ps, func(i, j int) bool {
+		return ps[i].GPC < ps[j].GPC || (ps[i].GPC == ps[j].GPC && ps[i].MemoryGB < ps[j].MemoryGB)
+	})
+	for _, p := range ps {
+		if p.MemoryGB*1024 >= memoryMB {
+			return p, true
+		}
+	}
+	return model.Profile{}, false
 }
 
 func profileByName(profiles []model.Profile, name string) model.Profile {

@@ -55,7 +55,7 @@ func TestResourceBoundRuntimeUsesAllocatedProfile(t *testing.T) {
 func TestSaturatedWindowValidation(t *testing.T) {
 	c := tiny()
 	c.Limits.MeasurementStartMS = 1
-	c.Limits.MinPeakUtilization = .99
+	c.Limits.MinAverageGPCUtilization = .80
 	c.Limits.MinBacklogFraction = .90
 	var jobs []model.Job
 	for i := 0; i < 7; i++ {

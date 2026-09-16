@@ -38,17 +38,21 @@ type Backend struct {
 }
 
 type Workload struct {
-	Format           string             `yaml:"format" json:"format"`
-	PrefillJobs      int                `yaml:"prefillJobs" json:"prefillJobs"`
-	Seed             int64              `yaml:"seed" json:"seed"`
-	Jobs             int                `yaml:"jobs" json:"jobs"`
-	Model            string             `yaml:"model" json:"model"`
-	ArrivalMeanMS    float64            `yaml:"arrivalMeanMS" json:"arrivalMeanMS"`
-	DurationMedianMS float64            `yaml:"durationMedianMS" json:"durationMedianMS"`
-	DurationSigma    float64            `yaml:"durationSigma" json:"durationSigma"`
-	BurstSize        int                `yaml:"burstSize" json:"burstSize"`
-	ProfileWeights   map[string]float64 `yaml:"profileWeights" json:"profileWeights"`
-	Repetitions      int                `yaml:"repetitions" json:"repetitions"`
+	Format string `yaml:"format" json:"format"`
+	// PrefillJobs is retained only so obsolete configurations fail loudly.
+	// Synthetic prefill changes both arrivals and placement geometry and must
+	// not be used by a scheduling benchmark.
+	PrefillJobs       int                `yaml:"prefillJobs,omitempty" json:"prefillJobs,omitempty"`
+	Seed              int64              `yaml:"seed" json:"seed"`
+	Jobs              int                `yaml:"jobs" json:"jobs"`
+	Model             string             `yaml:"model" json:"model"`
+	ArrivalMeanMS     float64            `yaml:"arrivalMeanMS" json:"arrivalMeanMS"`
+	TargetOfferedLoad float64            `yaml:"targetOfferedLoad" json:"targetOfferedLoad"`
+	DurationMedianMS  float64            `yaml:"durationMedianMS" json:"durationMedianMS"`
+	DurationSigma     float64            `yaml:"durationSigma" json:"durationSigma"`
+	BurstSize         int                `yaml:"burstSize" json:"burstSize"`
+	ProfileWeights    map[string]float64 `yaml:"profileWeights" json:"profileWeights"`
+	Repetitions       int                `yaml:"repetitions" json:"repetitions"`
 }
 
 type Costs struct {
@@ -58,12 +62,12 @@ type Costs struct {
 }
 
 type Limits struct {
-	SchedulingTimeoutMS int64   `yaml:"schedulingTimeoutMS" json:"schedulingTimeoutMS"`
-	SampleEveryMS       int64   `yaml:"sampleEveryMS" json:"sampleEveryMS"`
-	MeasurementStartMS  int64   `yaml:"measurementStartMS" json:"measurementStartMS"`
-	MinPeakUtilization  float64 `yaml:"minPeakUtilization" json:"minPeakUtilization"`
-	MinBacklogFraction  float64 `yaml:"minBacklogFraction" json:"minBacklogFraction"`
-	RequireHighLoad     bool    `yaml:"requireHighLoad" json:"requireHighLoad"`
+	SchedulingTimeoutMS      int64   `yaml:"schedulingTimeoutMS" json:"schedulingTimeoutMS"`
+	SampleEveryMS            int64   `yaml:"sampleEveryMS" json:"sampleEveryMS"`
+	MeasurementStartMS       int64   `yaml:"measurementStartMS" json:"measurementStartMS"`
+	MinAverageGPCUtilization float64 `yaml:"minAverageGPCUtilization" json:"minAverageGPCUtilization"`
+	MinBacklogFraction       float64 `yaml:"minBacklogFraction" json:"minBacklogFraction"`
+	RequireHighLoad          bool    `yaml:"requireHighLoad" json:"requireHighLoad"`
 }
 
 func Load(path string) (Config, error) {
@@ -101,8 +105,8 @@ func (c *Config) defaults() {
 	if c.Workload.Jobs == 0 {
 		c.Workload.Jobs = 100
 	}
-	if c.Workload.ArrivalMeanMS == 0 {
-		c.Workload.ArrivalMeanMS = 5000
+	if c.Workload.ArrivalMeanMS == 0 && c.Workload.TargetOfferedLoad == 0 {
+		c.Workload.TargetOfferedLoad = 1.10
 	}
 	if c.Workload.DurationMedianMS == 0 {
 		c.Workload.DurationMedianMS = 60000
@@ -134,8 +138,8 @@ func (c *Config) defaults() {
 	if c.Limits.SampleEveryMS == 0 {
 		c.Limits.SampleEveryMS = 1000
 	}
-	if c.Limits.MinPeakUtilization == 0 {
-		c.Limits.MinPeakUtilization = .95
+	if c.Limits.MinAverageGPCUtilization == 0 {
+		c.Limits.MinAverageGPCUtilization = .75
 	}
 	if c.Limits.MinBacklogFraction == 0 {
 		c.Limits.MinBacklogFraction = .90
@@ -156,6 +160,21 @@ func (c Config) Validate() error {
 	}
 	if c.Cluster.Nodes < 1 || c.Cluster.GPUsPerNode < 1 {
 		return fmt.Errorf("cluster nodes and GPUsPerNode must be positive")
+	}
+	if c.Workload.PrefillJobs != 0 {
+		return fmt.Errorf("workload.prefillJobs is obsolete: start from an empty cluster and use targetOfferedLoad")
+	}
+	if c.Workload.ArrivalMeanMS > 0 && c.Workload.TargetOfferedLoad > 0 {
+		return fmt.Errorf("set only one of workload.arrivalMeanMS and workload.targetOfferedLoad")
+	}
+	if c.Workload.ArrivalMeanMS < 0 || c.Workload.TargetOfferedLoad < 0 {
+		return fmt.Errorf("arrivalMeanMS and targetOfferedLoad cannot be negative")
+	}
+	if c.Workload.TargetOfferedLoad > 0 && c.Workload.TargetOfferedLoad < .01 {
+		return fmt.Errorf("targetOfferedLoad must be at least 0.01")
+	}
+	if c.Limits.MinAverageGPCUtilization < 0 || c.Limits.MinAverageGPCUtilization > 1 {
+		return fmt.Errorf("minAverageGPCUtilization must be in [0,1]")
 	}
 	if len(c.Backends) == 0 {
 		return fmt.Errorf("at least one backend is required")

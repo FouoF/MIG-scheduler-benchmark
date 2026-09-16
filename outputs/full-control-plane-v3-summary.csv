@@ -1,4 +1,0 @@
-backend,jobs,completed,makespan_ms,throughput_per_hour,mean_wait_ms,p95_wait_ms,gpc_utilization,memory_utilization,physical_fragmentation,stranded_capacity,request_fragmentation,mig_creates,mig_deletes,peak_gpc_utilization,backlogged_time_fraction,high_load_valid
-hami-master-6c17a8f,500,500,23835780,75.5167,2874508.1000,11986859.0500,0.8980,0.7963,0.0755,0.0000,272,500,500,1.0000,1.0000,true
-hami-release-v2.10.0,500,500,23847259,75.4804,2945290.6460,12337394.6500,0.9146,0.8086,0.0440,0.0000,260,500,500,1.0000,1.0000,true
-nvidia-dra-v0.5.0,500,500,23656972,76.0875,2755964.2500,13219744.8000,0.9254,0.8240,0.0618,0.0000,252,500,500,1.0000,1.0000,true

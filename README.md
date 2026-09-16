@@ -115,31 +115,23 @@ lock metadata, and `infrastructure-error.txt` remain in the result directory.
 `AZURE_RESOURCE_GROUP` and run `cloud/azure/cleanup.sh` after copying artifacts;
 the latter deletes the entire dedicated resource group.
 
-The September 2026 Azure smoke evidence is archived as
-`outputs/migbench-results.tar.gz` and includes raw objects, scheduler logs,
-rendered Helm manifests, Kubernetes versions, and events for all three upstream
-targets.
-
-The revised benchmark specification is `outputs/UPDATED-TEST-PLAN.md`. It uses
-resource-bound jobs (`computeCoreMS + memoryMB`) and derives duration from the
-profile actually allocated. The original fixed-profile trace is retained only
-as a placement regression workload.
-
 `computeCoreMS` is total compute work, not a minimum instantaneous compute
 guarantee. Memory is the hard scheduling constraint; a job allocated to a 3g
 profile runs for `computeCoreMS / 42%`. The saturated control-plane example uses
 the common profile subset supported by current HAMi DynamicMIG and NVIDIA DRA;
 see `experiment.control-plane.saturated.yaml`.
 
-The first 20-seed resource-bound Azure run is documented in
-`outputs/RESOURCE-BOUND-AZURE-REPORT.md`; its complete evidence bundle is
-`outputs/migbench-v2-azure-results.tar.gz`.
+The default experiment starts from an empty cluster. `targetOfferedLoad` derives
+the arrival interval from the generated jobs' GPC-time demand and total cluster
+capacity; it never edits GPU state or inserts prefill jobs. A target of `1.40`
+offers 40% more GPC-time than the cluster can serve. Traces are generated once
+and replayed unchanged against every backend.
 
-The default experiment is now a saturated fragmentation run: 56 prefill jobs
-occupy all GPC slots, compute duration has a 600-second median, and results are
-accepted only when peak GPC allocation reaches 99% and the pending queue is
-non-empty for at least 90% of the steady-state window. Validation results are
-in `outputs/SATURATED-FRAGMENTATION-REPORT.md`.
+High-load validation uses time-weighted average GPC utilization and backlog
+fraction. Peak utilization remains a diagnostic only: briefly reaching 100%
+does not by itself validate a fragmentation experiment. Set `arrivalMeanMS`
+only for experiments that intentionally need a fixed rate; it is mutually
+exclusive with `targetOfferedLoad`.
 
 ## Models and policies
 

@@ -1,3 +1,0 @@
-{"time":"2026-09-14T10:17:15.413291312Z","type":"published","backend":"nvidia-dra","message":"simulated H100 inventory published"}
-{"time":"2026-09-14T10:17:15.456601863Z","type":"allocated","backend":"nvidia-dra","key":"default/resource-job-a/0","message":"scheduler decision accepted","decision":{"key":"default/resource-job-a/0","backend":"nvidia-dra","node":"nvidia-dra-worker","gpu":"GPU-nvidia-dra-worker-0","profile":"2g.20gb","start":0,"size":2}}
-{"time":"2026-09-14T10:17:16.461590864Z","type":"released","backend":"nvidia-dra","key":"default/resource-job-a/0","message":"allocation object disappeared","decision":{"key":"default/resource-job-a/0","backend":"nvidia-dra","node":"nvidia-dra-worker","gpu":"GPU-nvidia-dra-worker-0","profile":"2g.20gb","start":0,"size":2}}

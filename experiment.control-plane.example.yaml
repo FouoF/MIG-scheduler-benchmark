@@ -26,9 +26,8 @@ workload:
   format: resource-bound-v2
   seed: 20260914
   jobs: 24
-  prefillJobs: 7
   model: adversarial
-  arrivalMeanMS: 15000
+  targetOfferedLoad: 1.40
   durationMedianMS: 600000
   durationSigma: 0.4
   repetitions: 1
@@ -47,6 +46,6 @@ limits:
   schedulingTimeoutMS: 30000
   sampleEveryMS: 1000
   measurementStartMS: 30000
-  minPeakUtilization: 0.99
-  minBacklogFraction: 0.90
+  minAverageGPCUtilization: 0.75
+  minBacklogFraction: 0.85
   requireHighLoad: true

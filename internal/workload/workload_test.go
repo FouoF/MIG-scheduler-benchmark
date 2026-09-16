@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -33,18 +34,33 @@ func TestAdversarialOrdersSmallThenLarge(t *testing.T) {
 	}
 }
 
-func TestPrefillOverridesAdversarialPhase(t *testing.T) {
-	c := config.Config{Cluster: config.Cluster{Profiles: config.H100Profiles()}, Workload: config.Workload{Seed: 1, Jobs: 8, PrefillJobs: 7, Model: "adversarial", ArrivalMeanMS: 1, DurationMedianMS: 1, DurationSigma: .1}}
+func TestOfferedLoadDerivesArrivalRateWithoutPrefill(t *testing.T) {
+	c := config.Config{
+		Cluster:  config.Cluster{Nodes: 2, GPUsPerNode: 4, GPCPerGPU: 7, Profiles: config.H100Profiles()},
+		Workload: config.Workload{Seed: 1, Jobs: 100, Model: "poisson", TargetOfferedLoad: 1.1, DurationMedianMS: 600000, DurationSigma: .1},
+	}
 	jobs, err := Generate(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 7; i++ {
-		if jobs[i].MemoryMB != 10240 || jobs[i].ComputeCoreMS < 1 || jobs[i].MinComputePercent != 0 {
-			t.Fatalf("prefill job %d was overridden: %+v", i, jobs[i])
-		}
+	if jobs[0].ArrivalMS <= 0 {
+		t.Fatalf("first job should arrive through the configured process, got %d", jobs[0].ArrivalMS)
 	}
-	if jobs[7].MemoryMB != 81920 {
-		t.Fatalf("post-prefill adversarial job is not large: %+v", jobs[7])
+	mean, err := arrivalMeanMS(c, jobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var occupied float64
+	for _, j := range jobs {
+		p, ok := smallestProfileForMemory(c.Cluster.Profiles, j.MemoryMB)
+		if !ok {
+			t.Fatal("generated infeasible job")
+		}
+		runtime := (j.ComputeCoreMS + int64(p.ComputePercent) - 1) / int64(p.ComputePercent)
+		occupied += float64(p.GPC) * float64(runtime)
+	}
+	load := occupied / float64(len(jobs)*2*4*7) / mean
+	if math.Abs(load-1.1) > 1e-9 {
+		t.Fatalf("derived offered load=%f, want 1.1", load)
 	}
 }

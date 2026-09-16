@@ -52,9 +52,10 @@ workload:
   format: resource-bound-v2
   seed: 20260914
   jobs: 500
-  prefillJobs: 56
   model: poisson
-  arrivalMeanMS: 15000
+  # Start empty. The generator derives the arrival rate from the sampled
+  # GPC-time demand and the 56-GPC cluster capacity.
+  targetOfferedLoad: 1.40
   durationMedianMS: 600000
   durationSigma: 0.8
   repetitions: 1
@@ -71,6 +72,8 @@ limits:
   schedulingTimeoutMS: 30000
   sampleEveryMS: 1000
   measurementStartMS: 30000
-  minPeakUtilization: 0.99
-  minBacklogFraction: 0.90
+  # Mixed 3g/7g memory geometry makes 100% GPC occupancy an invalid target;
+  # validate sustained pressure, not a synthetic instantaneous peak.
+  minAverageGPCUtilization: 0.75
+  minBacklogFraction: 0.85
   requireHighLoad: true

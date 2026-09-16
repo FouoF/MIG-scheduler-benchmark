@@ -231,9 +231,9 @@ func (e *engine) summary() model.Summary {
 		s.MeanStrandedCapacity = e.strandArea / float64(e.measurement)
 		s.BackloggedTimeFraction = float64(e.backlog) / float64(e.measurement)
 	}
-	s.HighLoadValid = s.PeakGPCUtilization >= e.c.Limits.MinPeakUtilization && s.BackloggedTimeFraction >= e.c.Limits.MinBacklogFraction
+	s.HighLoadValid = s.GPCUtilization >= e.c.Limits.MinAverageGPCUtilization && s.BackloggedTimeFraction >= e.c.Limits.MinBacklogFraction
 	if !s.HighLoadValid {
-		s.HighLoadFailure = fmt.Sprintf("peak utilization %.3f < %.3f or backlog fraction %.3f < %.3f", s.PeakGPCUtilization, e.c.Limits.MinPeakUtilization, s.BackloggedTimeFraction, e.c.Limits.MinBacklogFraction)
+		s.HighLoadFailure = fmt.Sprintf("average GPC utilization %.3f < %.3f or backlog fraction %.3f < %.3f", s.GPCUtilization, e.c.Limits.MinAverageGPCUtilization, s.BackloggedTimeFraction, e.c.Limits.MinBacklogFraction)
 	}
 	waits := make([]int64, 0, len(e.results))
 	var waitSum, scheduleSum int64

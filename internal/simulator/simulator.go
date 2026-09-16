@@ -404,10 +404,6 @@ func (e *engine) summary(total int) model.Summary {
 	if e.measurementMS > 0 {
 		s.BackloggedTimeFraction = float64(e.backlogMS) / float64(e.measurementMS)
 	}
-	s.HighLoadValid = s.PeakGPCUtilization >= e.c.Limits.MinPeakUtilization && s.BackloggedTimeFraction >= e.c.Limits.MinBacklogFraction
-	if !s.HighLoadValid {
-		s.HighLoadFailure = fmt.Sprintf("peak utilization %.3f < %.3f or backlog fraction %.3f < %.3f", s.PeakGPCUtilization, e.c.Limits.MinPeakUtilization, s.BackloggedTimeFraction, e.c.Limits.MinBacklogFraction)
-	}
 	if total > 0 {
 		s.SuccessRate = float64(len(e.results)) / float64(total)
 	}
@@ -419,6 +415,10 @@ func (e *engine) summary(total int) model.Summary {
 		s.MemoryUtilization = e.memArea / float64(e.measurementMS)
 		s.MeanPhysicalFragmentation = e.fragArea / float64(e.measurementMS)
 		s.MeanStrandedCapacity = e.strandedArea / float64(e.measurementMS)
+	}
+	s.HighLoadValid = s.GPCUtilization >= e.c.Limits.MinAverageGPCUtilization && s.BackloggedTimeFraction >= e.c.Limits.MinBacklogFraction
+	if !s.HighLoadValid {
+		s.HighLoadFailure = fmt.Sprintf("average GPC utilization %.3f < %.3f or backlog fraction %.3f < %.3f", s.GPCUtilization, e.c.Limits.MinAverageGPCUtilization, s.BackloggedTimeFraction, e.c.Limits.MinBacklogFraction)
 	}
 	waits := make([]int64, 0, len(e.results))
 	var sw, sl int64
