@@ -37,6 +37,9 @@ func Generate(c config.Config) ([]model.Job, error) {
 		if d < 1 {
 			d = 1
 		}
+		if c.Workload.DurationMaxMS > 0 && d > c.Workload.DurationMaxMS {
+			d = c.Workload.DurationMaxMS
+		}
 		job := model.Job{ID: fmt.Sprintf("job-%06d", i+1), Format: format}
 		if format == "profile-bound-v1" {
 			job.DurationMS, job.Profile = d, p

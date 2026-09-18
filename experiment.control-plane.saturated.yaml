@@ -57,6 +57,7 @@ workload:
   # GPC-time demand and the 56-GPC cluster capacity.
   targetOfferedLoad: 1.40
   durationMedianMS: 600000
+  durationMaxMS: 3600000
   durationSigma: 0.8
   repetitions: 1
   profileWeights:

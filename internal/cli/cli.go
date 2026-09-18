@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -231,6 +232,9 @@ func Compare(args []string) error {
 	if err := writeSummaryCSV(filepath.Join(filepath.Dir(*out), "summary.csv"), sums); err != nil {
 		return err
 	}
+	if err := writePairedBootstrapCSV(filepath.Join(filepath.Dir(*out), "paired-bootstrap.csv"), sums); err != nil {
+		return err
+	}
 	data, _ := json.Marshal(sums)
 	fout, err := os.Create(*out)
 	if err != nil {
@@ -238,6 +242,93 @@ func Compare(args []string) error {
 	}
 	defer fout.Close()
 	return reportTemplate.Execute(fout, map[string]any{"Rows": sums, "Data": template.JS(data)})
+}
+
+type metricDef struct {
+	name string
+	get  func(model.Summary) float64
+}
+
+func writePairedBootstrapCSV(path string, sums []model.Summary) error {
+	metrics := []metricDef{
+		{"makespan_ms", func(s model.Summary) float64 { return float64(s.MakespanMS) }},
+		{"mean_wait_ms", func(s model.Summary) float64 { return s.MeanWaitMS }},
+		{"stranded_gpc_ms", func(s model.Summary) float64 { return float64(s.StrandedGPCMS) }},
+		{"fragmentation_blocked_gpc_ms", func(s model.Summary) float64 { return float64(s.FragmentationBlockedGPCMS) }},
+	}
+	byScenario := map[string][]model.Summary{}
+	for _, s := range sums {
+		byScenario[s.Scenario] = append(byScenario[s.Scenario], s)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	w := csv.NewWriter(f)
+	defer w.Flush()
+	_ = w.Write([]string{"scenario", "baseline", "backend", "metric", "paired_seeds", "mean_difference", "ci95_low", "ci95_high"})
+	for scenario, rows := range byScenario {
+		baseline := ""
+		for _, s := range rows {
+			if strings.Contains(s.Backend, "release") {
+				baseline = s.Backend
+				break
+			}
+		}
+		if baseline == "" {
+			continue
+		}
+		baseBySeed := map[int64]model.Summary{}
+		backends := map[string]bool{}
+		for _, s := range rows {
+			if s.Backend == baseline {
+				baseBySeed[s.Seed] = s
+			} else {
+				backends[s.Backend] = true
+			}
+		}
+		for backend := range backends {
+			otherBySeed := map[int64]model.Summary{}
+			for _, s := range rows {
+				if s.Backend == backend {
+					otherBySeed[s.Seed] = s
+				}
+			}
+			for _, metric := range metrics {
+				var diffs []float64
+				for seed, base := range baseBySeed {
+					if other, ok := otherBySeed[seed]; ok {
+						diffs = append(diffs, metric.get(other)-metric.get(base))
+					}
+				}
+				if len(diffs) == 0 {
+					continue
+				}
+				estimate, lo, hi := pairedBootstrap(diffs, 2000)
+				_ = w.Write([]string{scenario, baseline, backend, metric.name, strconv.Itoa(len(diffs)), ff(estimate), ff(lo), ff(hi)})
+			}
+		}
+	}
+	return w.Error()
+}
+
+func pairedBootstrap(diffs []float64, rounds int) (float64, float64, float64) {
+	var estimate float64
+	for _, d := range diffs {
+		estimate += d
+	}
+	estimate /= float64(len(diffs))
+	r := rand.New(rand.NewPCG(0x6d696762656e6368, uint64(len(diffs))))
+	boots := make([]float64, rounds)
+	for i := range boots {
+		for range diffs {
+			boots[i] += diffs[r.IntN(len(diffs))]
+		}
+		boots[i] /= float64(len(diffs))
+	}
+	sort.Float64s(boots)
+	return estimate, boots[int(.025*float64(rounds))], boots[int(.975*float64(rounds))-1]
 }
 
 func writeSummaryCSV(path string, s []model.Summary) error {
@@ -248,9 +339,9 @@ func writeSummaryCSV(path string, s []model.Summary) error {
 	defer f.Close()
 	w := csv.NewWriter(f)
 	defer w.Flush()
-	_ = w.Write([]string{"backend", "jobs", "completed", "makespan_ms", "throughput_per_hour", "mean_wait_ms", "p95_wait_ms", "gpc_utilization", "memory_utilization", "physical_fragmentation", "stranded_capacity", "request_fragmentation", "mig_creates", "mig_deletes", "peak_gpc_utilization", "backlogged_time_fraction", "high_load_valid"})
+	_ = w.Write([]string{"scenario", "backend", "seed", "jobs", "completed", "makespan_ms", "throughput_per_hour", "mean_wait_ms", "p95_wait_ms", "gpc_utilization", "memory_utilization", "physical_fragmentation", "stranded_capacity", "request_fragmentation", "physical_fragmented_gpc_ms", "stranded_gpc_ms", "stranded_gpc_time_ratio", "fragmentation_blocked_gpc_ms", "fragmentation_blocked_memory_mb_ms", "offered_gpc_ms", "blocked_demand_ratio", "mig_creates", "mig_deletes", "peak_gpc_utilization", "backlogged_time_fraction", "high_load_valid"})
 	for _, x := range s {
-		_ = w.Write([]string{x.Backend, strconv.Itoa(x.Jobs), strconv.Itoa(x.Completed), strconv.FormatInt(x.MakespanMS, 10), ff(x.ThroughputPerVirtualHour), ff(x.MeanWaitMS), ff(x.P95WaitMS), ff(x.GPCUtilization), ff(x.MemoryUtilization), ff(x.MeanPhysicalFragmentation), ff(x.MeanStrandedCapacity), strconv.Itoa(x.RequestFragmentationCount), strconv.Itoa(x.MIGCreates), strconv.Itoa(x.MIGDeletes), ff(x.PeakGPCUtilization), ff(x.BackloggedTimeFraction), strconv.FormatBool(x.HighLoadValid)})
+		_ = w.Write([]string{x.Scenario, x.Backend, strconv.FormatInt(x.Seed, 10), strconv.Itoa(x.Jobs), strconv.Itoa(x.Completed), strconv.FormatInt(x.MakespanMS, 10), ff(x.ThroughputPerVirtualHour), ff(x.MeanWaitMS), ff(x.P95WaitMS), ff(x.GPCUtilization), ff(x.MemoryUtilization), ff(x.MeanPhysicalFragmentation), ff(x.MeanStrandedCapacity), strconv.Itoa(x.RequestFragmentationCount), strconv.FormatInt(x.PhysicalFragmentedGPCMS, 10), strconv.FormatInt(x.StrandedGPCMS, 10), ff(x.StrandedGPCTimeRatio), strconv.FormatInt(x.FragmentationBlockedGPCMS, 10), strconv.FormatInt(x.FragmentationBlockedMemMBMS, 10), strconv.FormatInt(x.OfferedGPCMS, 10), ff(x.BlockedDemandRatio), strconv.Itoa(x.MIGCreates), strconv.Itoa(x.MIGDeletes), ff(x.PeakGPCUtilization), ff(x.BackloggedTimeFraction), strconv.FormatBool(x.HighLoadValid)})
 	}
 	return w.Error()
 }
@@ -284,4 +375,4 @@ func Inspect(args []string) error {
 	return s.Err()
 }
 
-var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap{"pct": func(v float64) float64 { return v * 100 }}).Parse(`<!doctype html><html><head><meta charset="utf-8"><title>MIGBench Report</title><style>body{font:14px system-ui;margin:32px;color:#18212f}h1{margin-bottom:4px}.sub{color:#667085;margin-bottom:24px}table{border-collapse:collapse;width:100%;box-shadow:0 1px 4px #0002}th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:right}th{background:#f3f5f8}th:first-child,td:first-child{text-align:left}.cards{display:flex;gap:16px;margin:24px 0}.card{padding:16px;border:1px solid #ddd;border-radius:10px;flex:1}canvas{width:100%;height:300px;border:1px solid #eee;margin-top:22px}</style></head><body><h1>Dynamic MIG Scheduling Benchmark</h1><div class="sub">Self-contained paired experiment summary. Virtual-time performance and wall-clock scheduler latency are reported separately.</div><table><thead><tr><th>Backend</th><th>Completed</th><th>Makespan ms</th><th>Throughput /h</th><th>Mean wait ms</th><th>P95 wait ms</th><th>GPC util.</th><th>Memory util.</th><th>Physical frag.</th><th>Stranded</th><th>Req. frag.</th><th>Creates</th></tr></thead><tbody>{{range .Rows}}<tr><td>{{.Backend}}</td><td>{{.Completed}}/{{.Jobs}}</td><td>{{.MakespanMS}}</td><td>{{printf "%.2f" .ThroughputPerVirtualHour}}</td><td>{{printf "%.1f" .MeanWaitMS}}</td><td>{{printf "%.1f" .P95WaitMS}}</td><td>{{printf "%.1f%%" (pct .GPCUtilization)}}</td><td>{{printf "%.1f%%" (pct .MemoryUtilization)}}</td><td>{{printf "%.3f" .MeanPhysicalFragmentation}}</td><td>{{printf "%.3f" .MeanStrandedCapacity}}</td><td>{{.RequestFragmentationCount}}</td><td>{{.MIGCreates}}</td></tr>{{end}}</tbody></table><canvas id="chart" width="1100" height="300"></canvas><script>const rows={{.Data}},c=document.getElementById('chart'),x=c.getContext('2d');x.font='13px system-ui';const max=Math.max(...rows.map(r=>r.meanWaitMS),1),w=c.width/(rows.length*2+1);rows.forEach((r,i)=>{const h=r.meanWaitMS/max*230,px=w*(i*2+1);x.fillStyle='#635bff';x.fillRect(px,260-h,w,h);x.fillStyle='#18212f';x.fillText(r.backend,px,282);x.fillText(Math.round(r.meanWaitMS)+' ms',px,250-h)});x.fillText('Mean queue wait',12,20)</script></body></html>`))
+var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap{"pct": func(v float64) float64 { return v * 100 }, "gpch": func(v int64) float64 { return float64(v) / 3600000 }}).Parse(`<!doctype html><html><head><meta charset="utf-8"><title>MIGBench Report</title><style>body{font:14px system-ui;margin:32px;color:#18212f}h1{margin-bottom:4px}.sub{color:#667085;margin-bottom:24px}table{border-collapse:collapse;width:100%;box-shadow:0 1px 4px #0002}th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:right}th{background:#f3f5f8}th:first-child,td:first-child{text-align:left}.cards{display:flex;gap:16px;margin:24px 0}.card{padding:16px;border:1px solid #ddd;border-radius:10px;flex:1}canvas{width:100%;height:300px;border:1px solid #eee;margin-top:22px}</style></head><body><h1>Dynamic MIG Scheduling Benchmark</h1><div class="sub">Self-contained paired experiment summary. Virtual-time performance and wall-clock scheduler latency are reported separately.</div><table><thead><tr><th>Backend</th><th>Seed</th><th>Completed</th><th>Makespan ms</th><th>Throughput /h</th><th>Mean wait ms</th><th>P95 wait ms</th><th>GPC util.</th><th>Physical frag.</th><th>Stranded GPC·h</th><th>Blocked GPC·h</th><th>Blocked demand</th><th>Req. frag.</th></tr></thead><tbody>{{range .Rows}}<tr><td>{{.Backend}}</td><td>{{.Seed}}</td><td>{{.Completed}}/{{.Jobs}}</td><td>{{.MakespanMS}}</td><td>{{printf "%.2f" .ThroughputPerVirtualHour}}</td><td>{{printf "%.1f" .MeanWaitMS}}</td><td>{{printf "%.1f" .P95WaitMS}}</td><td>{{printf "%.1f%%" (pct .GPCUtilization)}}</td><td>{{printf "%.3f" .MeanPhysicalFragmentation}}</td><td>{{printf "%.2f" (gpch .StrandedGPCMS)}}</td><td>{{printf "%.2f" (gpch .FragmentationBlockedGPCMS)}}</td><td>{{printf "%.1f%%" (pct .BlockedDemandRatio)}}</td><td>{{.RequestFragmentationCount}}</td></tr>{{end}}</tbody></table><canvas id="chart" width="1100" height="300"></canvas><script>const rows={{.Data}},c=document.getElementById('chart'),x=c.getContext('2d');x.font='13px system-ui';const max=Math.max(...rows.map(r=>r.meanWaitMS),1),w=c.width/(rows.length*2+1);rows.forEach((r,i)=>{const h=r.meanWaitMS/max*230,px=w*(i*2+1);x.fillStyle='#635bff';x.fillRect(px,260-h,w,h);x.fillStyle='#18212f';x.fillText(r.backend,px,282);x.fillText(Math.round(r.meanWaitMS)+' ms',px,250-h)});x.fillText('Mean queue wait',12,20)</script></body></html>`))

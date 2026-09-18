@@ -30,38 +30,42 @@ type allocation struct {
 }
 
 type engine struct {
-	c           config.Config
-	b           config.Backend
-	api         agent.API
-	adapter     adapter.Adapter
-	agents      []*agent.Agent
-	nodes       []string
-	jobs        []model.Job
-	jobsByID    map[string]model.Job
-	submitted   map[string]time.Time
-	pending     map[string]bool
-	running     map[string]allocation
-	results     []model.JobResult
-	events      []model.Event
-	objects     map[string]string
-	fragmented  map[string]bool
-	now         int64
-	lastArrival int64
-	last        int64
-	creates     int
-	deletes     int
-	reqFrag     int
-	timeouts    int
-	measurement int64
-	backlog     int64
-	gpcArea     float64
-	memArea     float64
-	fragArea    float64
-	strandArea  float64
-	peak        float64
-	settle      time.Duration
-	poll        time.Duration
-	namespace   string
+	c                 config.Config
+	b                 config.Backend
+	api               agent.API
+	adapter           adapter.Adapter
+	agents            []*agent.Agent
+	nodes             []string
+	jobs              []model.Job
+	jobsByID          map[string]model.Job
+	submitted         map[string]time.Time
+	pending           map[string]bool
+	running           map[string]allocation
+	results           []model.JobResult
+	events            []model.Event
+	objects           map[string]string
+	fragmented        map[string]bool
+	now               int64
+	lastArrival       int64
+	last              int64
+	creates           int
+	deletes           int
+	reqFrag           int
+	timeouts          int
+	measurement       int64
+	backlog           int64
+	gpcArea           float64
+	memArea           float64
+	fragArea          float64
+	strandArea        float64
+	physicalGPCMS     int64
+	strandedGPCMS     int64
+	blockedGPCMS      int64
+	blockedMemoryMBMS int64
+	peak              float64
+	settle            time.Duration
+	poll              time.Duration
+	namespace         string
 }
 
 func Run(ctx context.Context, c config.Config, b config.Backend, jobs []model.Job, api agent.API) (Result, error) {

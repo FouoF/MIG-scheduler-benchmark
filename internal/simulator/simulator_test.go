@@ -29,13 +29,19 @@ func TestQueueReleaseAndNoLeak(t *testing.T) {
 
 func TestFragmentedRequestRecorded(t *testing.T) {
 	c := tiny()
-	jobs := []model.Job{{ID: "a", ArrivalMS: 0, DurationMS: 100, Profile: "3g.40gb"}, {ID: "b", ArrivalMS: 0, DurationMS: 100, Profile: "3g.40gb"}, {ID: "c", ArrivalMS: 1, DurationMS: 10, Profile: "2g.20gb"}}
+	jobs := []model.Job{{ID: "a", ArrivalMS: 0, DurationMS: 100, Profile: "3g.40gb"}, {ID: "b", ArrivalMS: 0, DurationMS: 100, Profile: "2g.20gb"}, {ID: "c", ArrivalMS: 1, DurationMS: 10, Profile: "2g.20gb"}}
 	r, err := Run(c, c.Backends[0], jobs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r.Summary.Completed != 3 {
 		t.Fatalf("not all completed: %+v", r.Summary)
+	}
+	if r.Summary.RequestFragmentationCount != 1 || r.Summary.FragmentationBlockedGPCMS <= 0 || r.Summary.FragmentationBlockedMemMBMS <= 0 {
+		t.Fatalf("fragmentation resource-time not recorded: %+v", r.Summary)
+	}
+	if r.Summary.OfferedGPCMS <= 0 || r.Summary.BlockedDemandRatio <= 0 {
+		t.Fatalf("fragmentation normalization not recorded: %+v", r.Summary)
 	}
 }
 

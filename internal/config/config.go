@@ -49,6 +49,7 @@ type Workload struct {
 	ArrivalMeanMS     float64            `yaml:"arrivalMeanMS" json:"arrivalMeanMS"`
 	TargetOfferedLoad float64            `yaml:"targetOfferedLoad" json:"targetOfferedLoad"`
 	DurationMedianMS  float64            `yaml:"durationMedianMS" json:"durationMedianMS"`
+	DurationMaxMS     int64              `yaml:"durationMaxMS" json:"durationMaxMS"`
 	DurationSigma     float64            `yaml:"durationSigma" json:"durationSigma"`
 	BurstSize         int                `yaml:"burstSize" json:"burstSize"`
 	ProfileWeights    map[string]float64 `yaml:"profileWeights" json:"profileWeights"`
@@ -111,6 +112,9 @@ func (c *Config) defaults() {
 	if c.Workload.DurationMedianMS == 0 {
 		c.Workload.DurationMedianMS = 60000
 	}
+	if c.Workload.DurationMaxMS == 0 {
+		c.Workload.DurationMaxMS = 3600000
+	}
 	if c.Workload.DurationSigma == 0 {
 		c.Workload.DurationSigma = .8
 	}
@@ -172,6 +176,9 @@ func (c Config) Validate() error {
 	}
 	if c.Workload.TargetOfferedLoad > 0 && c.Workload.TargetOfferedLoad < .01 {
 		return fmt.Errorf("targetOfferedLoad must be at least 0.01")
+	}
+	if c.Workload.DurationMaxMS < 0 {
+		return fmt.Errorf("durationMaxMS cannot be negative")
 	}
 	if c.Limits.MinAverageGPCUtilization < 0 || c.Limits.MinAverageGPCUtilization > 1 {
 		return fmt.Errorf("minAverageGPCUtilization must be in [0,1]")

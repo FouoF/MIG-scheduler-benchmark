@@ -64,3 +64,19 @@ func TestOfferedLoadDerivesArrivalRateWithoutPrefill(t *testing.T) {
 		t.Fatalf("derived offered load=%f, want 1.1", load)
 	}
 }
+
+func TestDurationIsCapped(t *testing.T) {
+	c := config.Config{
+		Cluster:  config.Cluster{Nodes: 1, GPUsPerNode: 1, GPCPerGPU: 7, Profiles: config.H100Profiles()},
+		Workload: config.Workload{Format: "profile-bound-v1", Seed: 7, Jobs: 100, Model: "poisson", ArrivalMeanMS: 1, DurationMedianMS: 1000, DurationMaxMS: 100, DurationSigma: 2},
+	}
+	jobs, err := Generate(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, j := range jobs {
+		if j.DurationMS > 100 {
+			t.Fatalf("job %s duration=%d exceeds cap", j.ID, j.DurationMS)
+		}
+	}
+}

@@ -51,6 +51,8 @@ type engine struct {
 	creates, deletes, reconfigs, reqFrag     int
 	lastArrival, measurementMS, backlogMS    int64
 	peakGPCUtilization                       float64
+	physicalGPCMS, strandedGPCMS             int64
+	blockedGPCMS, blockedMemoryMBMS          int64
 }
 
 func Run(c config.Config, b config.Backend, jobs []model.Job) (Result, error) {
@@ -274,7 +276,22 @@ func (e *engine) integrate(dt int64) {
 		return
 	}
 	usedG, usedM, totalG, totalM := 0, 0, 0, 0
-	frag, stranded := e.fragmentation()
+	frag, stranded, physicalGPC, strandedGPC := e.fragmentation()
+	for _, j := range e.pending {
+		p, ok := e.resolveProfile(j)
+		if !ok {
+			continue
+		}
+		cs, totalEnough := e.candidates(j, p)
+		if len(cs) == 0 && totalEnough {
+			e.blockedGPCMS += int64(p.GPC) * dt
+			memoryMB := j.MemoryMB
+			if memoryMB == 0 {
+				memoryMB = p.MemoryGB * 1024
+			}
+			e.blockedMemoryMBMS += int64(memoryMB) * dt
+		}
+	}
 	for ni := range e.nodes {
 		for gi := range e.nodes[ni].gpus {
 			g := &e.nodes[ni].gpus[gi]
@@ -303,6 +320,8 @@ func (e *engine) integrate(dt int64) {
 		e.memArea += float64(usedM*int(window)) / float64(totalM)
 		e.fragArea += frag * float64(window)
 		e.strandedArea += stranded * float64(window)
+		e.physicalGPCMS += int64(physicalGPC) * window
+		e.strandedGPCMS += int64(strandedGPC) * window
 		if len(e.pending) > 0 {
 			e.backlogMS += window
 		}
@@ -313,8 +332,9 @@ func (e *engine) integrate(dt int64) {
 	}
 }
 
-func (e *engine) fragmentation() (float64, float64) {
+func (e *engine) fragmentation() (float64, float64, int, int) {
 	var pf, sf float64
+	physicalGPC, strandedGPC := 0, 0
 	count := 0
 	for ni := range e.nodes {
 		for gi := range e.nodes[ni].gpus {
@@ -336,14 +356,16 @@ func (e *engine) fragmentation() (float64, float64) {
 				pf += float64(free-maxrun) / float64(free)
 				pack := e.maxPack(g)
 				sf += float64(free-pack) / float64(free)
+				physicalGPC += free - maxrun
+				strandedGPC += free - pack
 			}
 			count++
 		}
 	}
 	if count == 0 {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
-	return pf / float64(count), sf / float64(count)
+	return pf / float64(count), sf / float64(count), physicalGPC, strandedGPC
 }
 
 func (e *engine) maxPack(g *gpu) int {
@@ -395,12 +417,16 @@ func (e *engine) maxPack(g *gpu) int {
 }
 
 func (e *engine) emit(kind string, j model.Job, n string, g int, msg string) {
-	pf, sf := e.fragmentation()
+	pf, sf, _, _ := e.fragmentation()
 	e.events = append(e.events, model.Event{TimeMS: e.now, WallTime: model.Now(), Type: kind, Backend: e.backend.Name, JobID: j.ID, Node: n, GPU: g, Profile: j.Profile, QueueDepth: len(e.pending), PhysicalFrag: pf, Stranded: sf, Message: msg})
 }
 
 func (e *engine) summary(total int) model.Summary {
-	s := model.Summary{Backend: e.backend.Name, Seed: e.c.Workload.Seed, Jobs: total, Completed: len(e.results), MakespanMS: e.now, MIGCreates: e.creates, MIGDeletes: e.deletes, MIGReconfigures: e.reconfigs, RequestFragmentationCount: e.reqFrag, PeakGPCUtilization: e.peakGPCUtilization, MeasurementDurationMS: e.measurementMS}
+	s := model.Summary{Backend: e.backend.Name, Scenario: e.c.Name, Seed: e.c.Workload.Seed, Jobs: total, Completed: len(e.results), MakespanMS: e.now, MIGCreates: e.creates, MIGDeletes: e.deletes, MIGReconfigures: e.reconfigs, RequestFragmentationCount: e.reqFrag, PeakGPCUtilization: e.peakGPCUtilization, MeasurementDurationMS: e.measurementMS}
+	s.PhysicalFragmentedGPCMS = e.physicalGPCMS
+	s.StrandedGPCMS = e.strandedGPCMS
+	s.FragmentationBlockedGPCMS = e.blockedGPCMS
+	s.FragmentationBlockedMemMBMS = e.blockedMemoryMBMS
 	if e.measurementMS > 0 {
 		s.BackloggedTimeFraction = float64(e.backlogMS) / float64(e.measurementMS)
 	}
@@ -415,6 +441,14 @@ func (e *engine) summary(total int) model.Summary {
 		s.MemoryUtilization = e.memArea / float64(e.measurementMS)
 		s.MeanPhysicalFragmentation = e.fragArea / float64(e.measurementMS)
 		s.MeanStrandedCapacity = e.strandedArea / float64(e.measurementMS)
+		totalGPC := e.c.Cluster.Nodes * e.c.Cluster.GPUsPerNode * e.c.Cluster.GPCPerGPU
+		s.StrandedGPCTimeRatio = float64(s.StrandedGPCMS) / float64(int64(totalGPC)*e.measurementMS)
+	}
+	for _, r := range e.results {
+		s.OfferedGPCMS += int64(profileGPC(e.c.Cluster.Profiles, r.Profile)) * r.RuntimeMS
+	}
+	if s.OfferedGPCMS > 0 {
+		s.BlockedDemandRatio = float64(s.FragmentationBlockedGPCMS) / float64(s.OfferedGPCMS)
 	}
 	s.HighLoadValid = s.GPCUtilization >= e.c.Limits.MinAverageGPCUtilization && s.BackloggedTimeFraction >= e.c.Limits.MinBacklogFraction
 	if !s.HighLoadValid {
@@ -435,6 +469,15 @@ func (e *engine) summary(total int) model.Summary {
 		s.P99WaitMS = quantile(waits, .99)
 	}
 	return s
+}
+
+func profileGPC(profiles []model.Profile, name string) int {
+	for _, p := range profiles {
+		if p.Name == name {
+			return p.GPC
+		}
+	}
+	return 0
 }
 func quantile(v []int64, q float64) float64 {
 	v = append([]int64(nil), v...)

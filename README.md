@@ -133,6 +133,25 @@ does not by itself validate a fragmentation experiment. Set `arrivalMeanMS`
 only for experiments that intentionally need a fixed rate; it is mutually
 exclusive with `targetOfferedLoad`.
 
+`durationMaxMS` truncates the log-normal duration tail (the checked-in
+experiments use one hour), preventing one extreme job from determining the
+whole makespan. Fragmentation impact is reported as resource-time as well as
+instantaneous ratios:
+
+- `strandedGPCMS`: capacity-side GPC time that cannot be legally packed;
+- `fragmentationBlockedGPCMS`: requested GPC time spent blocked despite enough
+  aggregate capacity;
+- `fragmentationBlockedMemoryMBMS`: the corresponding memory demand time;
+- `blockedDemandRatio`: blocked GPC time divided by offered GPC service time.
+
+For an unattended real-control-plane matrix, copy the three locked backend
+configs, manifests, kind config, runner, and master image to the host, then run
+`hack/long-run-control-plane.sh`. Its defaults cover eight paired seeds and
+balanced, small-heavy, and large-heavy profile distributions. Every backend
+gets a fresh kind cluster, completed runs are skipped on restart, and all raw
+evidence is archived. `hack/schedule-long-run.sh` schedules it with a systemd
+timer; set `START_AT` to choose the local start time.
+
 ## Models and policies
 
 Workload models are `poisson`, `burst`, `profile-skew`, and `adversarial`.

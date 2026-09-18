@@ -29,6 +29,7 @@ workload:
   model: adversarial
   targetOfferedLoad: 1.40
   durationMedianMS: 600000
+  durationMaxMS: 3600000
   durationSigma: 0.4
   repetitions: 1
   profileWeights:
